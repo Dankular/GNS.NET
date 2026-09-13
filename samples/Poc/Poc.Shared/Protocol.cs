@@ -13,6 +13,9 @@ public static class Protocol
     /// <summary>Client -&gt; Server: MemoryPack-serialized <see cref="ClientInput"/>.</summary>
     public const byte OpcodeClientInput = 0x01;
 
+    /// <summary>Client -&gt; server: PlayFab session ticket when PlayFab mode is enabled.</summary>
+    public const byte OpcodePlayFabHandshake = 0x00;
+
     /// <summary>Server -&gt; Client: MemoryPack-serialized <see cref="ServerState"/>.</summary>
     public const byte OpcodeServerState = 0x02;
 }

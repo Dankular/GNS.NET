@@ -67,6 +67,12 @@ never treat an unverified client-supplied subject as an identity. This supports 
 Xbox/XSTS, Google Play Games, Apple Game Center, and any custom provider without adding their SDKs
 to the transport package.
 
+For a direct PlayFab integration, use `PlayFabSessionTicketVerifier`. It calls PlayFab's
+`https://<titleId>.playfabapi.com/Server/AuthenticateSessionTicket` endpoint with `X-SecretKey`
+server-side, then maps the returned `UserInfo.PlayFabId` into a GNS.NET admission ticket. The POC
+also supports `--playfab`; see [`samples/Poc/README.md`](samples/Poc/README.md#run). Keep the title
+secret in `.env` or a secret manager—never in a client build, command history, or Git.
+
 For a local two-process smoke test where Steamworks/native auth-ticket provisioning is unavailable,
 the POC supports an explicit development-only `--insecure` flag:
 

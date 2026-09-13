@@ -36,6 +36,17 @@ The duration flag makes the two-process test CI-friendly. The client should prin
 server.` followed by advancing server ticks and positions; the server should print its connection
 event. Omit `--duration-seconds` for the interactive Ctrl+C mode.
 
+To validate a real PlayFab client session ticket, set `PLAYFAB_TITLE_ID`, `PLAYFAB_SECRET_KEY`,
+and `PLAYFAB_SESSION_TICKET` in a local `.env` file, then run both processes with `--playfab`.
+The secret key is read only by the server; the client sends only the session ticket:
+
+Terminal 1: `dotnet run --project samples/Poc/Poc.Server -- --playfab --duration-seconds 30`
+Terminal 2: `dotnet run --project samples/Poc/Poc.Client -- 127.0.0.1:27015 --playfab --duration-seconds 20`
+
+The server calls PlayFab `POST /Server/AuthenticateSessionTicket` and accepts gameplay only after
+PlayFab returns a non-expired `UserInfo.PlayFabId`. A PlayFab secret key alone cannot authenticate
+a player; a client login session ticket and title id are also required.
+
 The client's input isn't real keyboard/controller input - it's a deterministic scripted
 pattern (`ScriptedInput` in `Poc.Shared`) that cycles right / down / left / up every 2 seconds,
 so a run is reproducible without a human at the keyboard.

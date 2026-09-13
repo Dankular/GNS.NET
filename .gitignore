@@ -3,6 +3,9 @@ bin/
 obj/
 artifacts/
 *.user
+.env
+.env.*
+!.env.example
 
 ## Native libraries you build yourself (see README) — not vendored in this repo
 *.so

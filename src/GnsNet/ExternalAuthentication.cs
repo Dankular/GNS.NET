@@ -107,3 +107,57 @@ public sealed class PlayFabIdentityVerifier(HttpClient client, Uri endpoint) : H
 public sealed class XboxXstsIdentityVerifier(HttpClient client, Uri endpoint) : HttpIdentityVerifier("xbox-xsts", client, endpoint);
 public sealed class GooglePlayGamesIdentityVerifier(HttpClient client, Uri endpoint) : HttpIdentityVerifier("google-play-games", client, endpoint);
 public sealed class AppleGameCenterIdentityVerifier(HttpClient client, Uri endpoint) : HttpIdentityVerifier("apple-game-center", client, endpoint);
+
+/// <summary>Validates a PlayFab client session ticket using the PlayFab Server API.</summary>
+/// <remarks>
+/// The title secret key stays server-side and is sent only as the X-SecretKey header. PlayFab
+/// documents this endpoint as POST /Server/AuthenticateSessionTicket on the title API hostname.
+/// </remarks>
+public sealed class PlayFabSessionTicketVerifier : IExternalIdentityVerifier
+{
+    private readonly HttpClient client;
+    private readonly string secretKey;
+    private readonly Uri endpoint;
+    public PlayFabSessionTicketVerifier(string titleId, string secretKey, HttpClient? client = null)
+    {
+        if (string.IsNullOrWhiteSpace(titleId) || titleId.Any(char.IsWhiteSpace)) throw new ArgumentException("A PlayFab title id is required.", nameof(titleId));
+        if (string.IsNullOrWhiteSpace(secretKey)) throw new ArgumentException("A PlayFab secret key is required.", nameof(secretKey));
+        this.secretKey = secretKey; this.client = client ?? new HttpClient();
+        this.endpoint = new Uri($"https://{titleId}.playfabapi.com/Server/AuthenticateSessionTicket", UriKind.Absolute);
+    }
+    public async ValueTask<ExternalIdentity?> VerifyAsync(string credential, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credential)) return null;
+        using var request = new HttpRequestMessage(HttpMethod.Post, this.endpoint) { Content = JsonContent.Create(new { SessionTicket = credential }) };
+        request.Headers.Add("X-SecretKey", this.secretKey);
+        using HttpResponseMessage response = await this.client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode) return null;
+        using JsonDocument document = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellationToken).ConfigureAwait(false) ?? throw new InvalidDataException("PlayFab response was empty.");
+        JsonElement root = document.RootElement;
+        if (root.TryGetProperty("IsSessionTicketExpired", out JsonElement expired) && expired.ValueKind == JsonValueKind.True) return null;
+        if (!root.TryGetProperty("UserInfo", out JsonElement user) || !user.TryGetProperty("PlayFabId", out JsonElement id) || string.IsNullOrWhiteSpace(id.GetString())) return null;
+        var claims = new Dictionary<string, string>(StringComparer.Ordinal) { ["playfab_id"] = id.GetString()! };
+        if (user.TryGetProperty("Username", out JsonElement username) && username.ValueKind == JsonValueKind.String) claims["username"] = username.GetString()!;
+        return new ExternalIdentity("playfab", id.GetString()!, claims);
+    }
+}
+
+/// <summary>Loads non-secret PlayFab settings from a dotenv file or process environment.</summary>
+public static class PlayFabEnvironment
+{
+    public static (string TitleId, string SecretKey, string? SessionTicket) Load(string path = ".env")
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (File.Exists(path)) foreach (string raw in File.ReadAllLines(path))
+        {
+            string line = raw.Trim(); if (line.Length == 0 || line.StartsWith('#')) continue;
+            int separator = line.IndexOf('='); if (separator <= 0) continue;
+            values[line[..separator].Trim()] = line[(separator + 1)..].Trim().Trim('"', '\'');
+        }
+        string Read(string name) => values.TryGetValue(name, out string? fromFile) && fromFile.Length != 0 ? fromFile : Environment.GetEnvironmentVariable(name) ?? "";
+        string titleId = Read("PLAYFAB_TITLE_ID"); string secretKey = Read("PLAYFAB_SECRET_KEY"); string? ticket = Read("PLAYFAB_SESSION_TICKET");
+        if (string.IsNullOrWhiteSpace(titleId)) throw new InvalidOperationException("PLAYFAB_TITLE_ID is not configured.");
+        if (string.IsNullOrWhiteSpace(secretKey)) throw new InvalidOperationException("PLAYFAB_SECRET_KEY is not configured.");
+        return (titleId, secretKey, string.IsNullOrWhiteSpace(ticket) ? null : ticket);
+    }
+}

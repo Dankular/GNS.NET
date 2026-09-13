@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 using GnsNet;
 using GnsNet.Poc;
 using GnsSharp;
@@ -7,6 +8,7 @@ using GnsSharp;
 const string ListenAddress = "[::]:27015";
 const float SpeedPerTick = 2f;
 bool insecure = args.Any(arg => string.Equals(arg, "--insecure", StringComparison.OrdinalIgnoreCase));
+bool playFab = args.Any(arg => string.Equals(arg, "--playfab", StringComparison.OrdinalIgnoreCase));
 int durationSeconds = ReadDuration(args);
 
 Console.WriteLine("GNS.NET POC Server");
@@ -22,6 +24,13 @@ if (insecure)
 {
     server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
     Console.WriteLine("WARNING: --insecure disables native authentication/encryption checks for local development only.");
+}
+PlayFabSessionTicketVerifier? playFabVerifier = null;
+if (playFab)
+{
+    var playFabSettings = PlayFabEnvironment.Load();
+    playFabVerifier = new PlayFabSessionTicketVerifier(playFabSettings.TitleId, playFabSettings.SecretKey);
+    Console.WriteLine("PlayFab session-ticket validation enabled.");
 }
 
 server.ClientConnected += connection => Console.WriteLine($"Client connected: {connection}");
@@ -43,6 +52,7 @@ var simulation = new AuthoritativeServer<string, ServerState, ClientInput>(new S
     (state, _, value) => new ServerState { X = state.X + value.Dx * SpeedPerTick, Y = state.Y + value.Dy * SpeedPerTick },
     inputGuard: inputGuard);
 simulation.AddClient("poc-client");
+var playFabConnections = new HashSet<GnsConnection>();
 
 var tickLoop = new TickLoop(Protocol.TickInterval);
 await tickLoop.RunAsync((tick, _) =>
@@ -52,6 +62,18 @@ await tickLoop.RunAsync((tick, _) =>
         try
         {
             NetFrame frame = NetFrame.Decode(message.Data);
+            if (playFabVerifier is not null)
+            {
+                if (frame.Opcode == Protocol.OpcodePlayFabHandshake)
+                {
+                    ExternalIdentity? identity = playFabVerifier.VerifyAsync(Encoding.UTF8.GetString(frame.Payload)).AsTask().GetAwaiter().GetResult();
+                    if (identity is null) { server.Reject(message.Connection, "Invalid PlayFab session ticket"); continue; }
+                    playFabConnections.Add(message.Connection);
+                    Console.WriteLine($"PlayFab authenticated: {identity.Value.Subject}");
+                    continue;
+                }
+                if (!playFabConnections.Contains(message.Connection)) { server.Reject(message.Connection, "PlayFab handshake required"); continue; }
+            }
             if (frame.Opcode == Protocol.OpcodeClientInput && NetSerializer.Deserialize<ClientInput>(frame.Payload) is ClientInput input)
                 simulation.SubmitInput("poc-client", frame.Tick, input);
         }

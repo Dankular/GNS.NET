@@ -4,6 +4,8 @@ using GnsNet;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Net;
+using System.Net.Http;
 using Xunit;
 
 public sealed class ExternalAuthenticationTests
@@ -38,6 +40,28 @@ public sealed class ExternalAuthenticationTests
         Assert.False(new ConnectTokenService(Enumerable.Repeat((byte)1, 32).ToArray()).TryValidate(token!, out _)); // token secrets are never interchangeable
     }
 
+    [Fact]
+    public async Task PlayFabVerifier_ValidatesSessionTicketAndExtractsPlayFabId()
+    {
+        string? receivedSecret = null; string? receivedBody = null;
+        using var client = new HttpClient(new StubHandler(request =>
+        {
+            receivedSecret = request.Headers.GetValues("X-SecretKey").Single(); receivedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"IsSessionTicketExpired\":false,\"UserInfo\":{\"PlayFabId\":\"PF-42\",\"Username\":\"runner\"}}", Encoding.UTF8, "application/json") };
+        }));
+        var verifier = new PlayFabSessionTicketVerifier("ABCD1", "server-secret", client);
+        ExternalIdentity? identity = await verifier.VerifyAsync("ticket-123");
+        Assert.Equal("server-secret", receivedSecret); Assert.Contains("ticket-123", receivedBody); Assert.Equal("PF-42", identity?.Subject); Assert.Equal("runner", identity?.Claims["username"]);
+    }
+
+    [Fact]
+    public async Task PlayFabVerifier_RejectsExpiredTicketAndNonHttpsCustomAdapters()
+    {
+        using var client = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"IsSessionTicketExpired\":true}") }));
+        Assert.Null(await new PlayFabSessionTicketVerifier("ABCD1", "server-secret", client).VerifyAsync("expired"));
+        Assert.Throws<ArgumentException>(() => new PlayFabIdentityVerifier(client, new Uri("http://localhost/verify")));
+    }
+
     private sealed class FixedVerifier : IExternalIdentityVerifier
     {
         public ValueTask<ExternalIdentity?> VerifyAsync(string credential, CancellationToken cancellationToken = default)
@@ -53,4 +77,9 @@ public sealed class ExternalAuthenticationTests
     }
     private static string Base64Url(string value) => Base64Url(Encoding.UTF8.GetBytes(value));
     private static string Base64Url(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(handler(request));
+    }
 }

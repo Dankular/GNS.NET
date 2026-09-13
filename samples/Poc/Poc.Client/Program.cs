@@ -1,11 +1,13 @@
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 using GnsNet;
 using GnsNet.Poc;
 using GnsSharp;
 
 string address = args.Length > 0 ? args[0] : "127.0.0.1:27015";
 bool insecure = args.Any(arg => string.Equals(arg, "--insecure", StringComparison.OrdinalIgnoreCase));
+bool playFab = args.Any(arg => string.Equals(arg, "--playfab", StringComparison.OrdinalIgnoreCase));
 int durationSeconds = ReadDuration(args);
 
 Console.WriteLine("GNS.NET POC Client");
@@ -22,11 +24,18 @@ if (insecure)
     client.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
     Console.WriteLine("WARNING: --insecure disables native authentication/encryption checks for local development only.");
 }
+string? playFabTicket = null;
+if (playFab)
+{
+    playFabTicket = PlayFabEnvironment.Load().SessionTicket ?? throw new InvalidOperationException("PLAYFAB_SESSION_TICKET is required for --playfab.");
+    Console.WriteLine("PlayFab session-ticket handshake enabled.");
+}
 
 bool connected = false;
 client.Connected += () =>
 {
     connected = true;
+    if (playFabTicket is not null) client.Send(new NetFrame(Protocol.OpcodePlayFabHandshake, 0, Encoding.UTF8.GetBytes(playFabTicket)).Encode(), ESteamNetworkingSendType.Reliable);
     Console.WriteLine("Connected to server.");
 };
 client.Disconnected += (reason, debug) => Console.WriteLine($"Disconnected: {reason} ({debug})");
