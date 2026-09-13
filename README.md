@@ -36,6 +36,37 @@ the registered guards before application handlers run.
 `ConnectTokenService` backed by a web backend or matchmaker-issued short-lived token; set
 `RequireApplicationAdmission = false` only for an intentionally open development server.
 
+### External authentication adapters
+
+GNS.NET does not require a Steamworks identity provider. Verify a provider credential in your web
+backend, then exchange the verified identity for a short-lived GNS.NET ticket:
+
+```csharp
+var gateway = new AuthenticationGateway(connectTokenService);
+var verifier = new JwtIdentityVerifier("oidc", issuer, audience, jwksKeys);
+string? ticket = await gateway.AuthenticateAsync(verifier, providerJwt, TimeSpan.FromMinutes(2));
+// Send `ticket` to the client; GnsClientHost sends it in the admission handshake.
+```
+
+`JwtIdentityVerifier` validates RS256 signatures, `kid`, issuer, audience, `exp`, and `nbf` claims.
+Use `JwksLoader.LoadAsync` to load RSA keys from an HTTPS JWKS endpoint. For providers whose native
+credential format must be checked by their SDK or service, use the HTTPS validation adapters:
+
+```csharp
+using var http = new HttpClient();
+var eos = new EosIdentityVerifier(http, new Uri("https://auth.example.com/verify/eos"));
+var playFab = new PlayFabIdentityVerifier(http, new Uri("https://auth.example.com/verify/playfab"));
+var xbox = new XboxXstsIdentityVerifier(http, new Uri("https://auth.example.com/verify/xsts"));
+var google = new GooglePlayGamesIdentityVerifier(http, new Uri("https://auth.example.com/verify/google"));
+var apple = new AppleGameCenterIdentityVerifier(http, new Uri("https://auth.example.com/verify/apple"));
+```
+
+Each endpoint must authenticate the credential with the provider, return HTTP 2xx, and respond with
+`{"subject":"provider-user-id","claims":{...}}`. The adapters reject non-HTTPS endpoints and
+never treat an unverified client-supplied subject as an identity. This supports EOS, PlayFab,
+Xbox/XSTS, Google Play Games, Apple Game Center, and any custom provider without adding their SDKs
+to the transport package.
+
 For a local two-process smoke test where Steamworks/native auth-ticket provisioning is unavailable,
 the POC supports an explicit development-only `--insecure` flag:
 
