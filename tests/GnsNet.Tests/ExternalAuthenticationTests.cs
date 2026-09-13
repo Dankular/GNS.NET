@@ -78,6 +78,27 @@ public sealed class ExternalAuthenticationTests
         Assert.Null(await wrongContext.VerifyAsync("eos-credential"));
     }
 
+    [Fact]
+    public async Task FlatFileVerifier_AuthenticatesHashedUsersAndRejectsInvalidUsers()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"gns-users-{Guid.NewGuid():N}.json");
+        try
+        {
+            FlatFileUser user = FlatFilePasswordHasher.CreateUser("developer", "correct horse battery staple", "dev-42", new Dictionary<string, string> { ["role"] = "admin" });
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new[] { user }));
+            var verifier = new FlatFileIdentityVerifier(path);
+            ExternalIdentity? identity = await verifier.VerifyAsync(new FlatFileCredential("developer", "correct horse battery staple").Encode());
+            Assert.Equal("flat-file", identity?.Provider); Assert.Equal("dev-42", identity?.Subject); Assert.Equal("admin", identity?.Claims["role"]);
+            Assert.Null(await verifier.VerifyAsync(new FlatFileCredential("developer", "wrong password").Encode()));
+            Assert.Null(await verifier.VerifyAsync("not-json"));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void FlatFilePasswordHasher_RejectsWeakPasswords()
+        => Assert.Throws<ArgumentException>(() => FlatFilePasswordHasher.CreateUser("developer", "short"));
+
     private sealed class FixedVerifier : IExternalIdentityVerifier
     {
         public ValueTask<ExternalIdentity?> VerifyAsync(string credential, CancellationToken cancellationToken = default)

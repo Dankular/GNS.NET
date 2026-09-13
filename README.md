@@ -26,6 +26,7 @@ before deserialization.
 | `SnapshotPipeline` | Automatic AOI culling, acknowledged delta baselines, relevance priority, batching, and state/event channels. |
 | `ReliableBackendBus` / `TcpBackendMessageBus` | Authenticated, ordered, retrying server-to-server transport. |
 | `NetworkDebugOverlay` | Renderer-neutral per-connection RTT, loss, packet, and byte diagnostics for in-game overlays. |
+| `FlatFileIdentityVerifier` | Built-in PBKDF2-backed JSON user authentication for local and small deployments. |
 
 The framework leaves game-specific state and physics to the application, but provides the transport
 policies and integration points around them. MemoryPack messages must be schema-defined with
@@ -109,6 +110,29 @@ similar to:
 GNS.NET rejects the response when `valid` is false, the Product User ID is absent, any configured
 deployment/sandbox/client/nonce does not match, or `expiresAt` has passed. The EOS client secret
 and EOS SDK remain backend-only; they are never sent over the GNS transport.
+
+#### Built-in flat-file authentication
+
+For local tools, private test servers, and small deployments that do not need an external identity
+provider, `FlatFileIdentityVerifier` reads PBKDF2 password records from a JSON file. Generate users
+in an administrative setup tool; do not hand-write or store plaintext passwords:
+
+```csharp
+FlatFileUser admin = FlatFilePasswordHasher.CreateUser(
+    "developer", "correct horse battery staple", "developer-1",
+    new Dictionary<string, string> { ["role"] = "admin" });
+await File.WriteAllTextAsync("users.json", JsonSerializer.Serialize(new[] { admin }));
+
+var verifier = new FlatFileIdentityVerifier("users.json");
+string credential = new FlatFileCredential("developer", password).Encode();
+string? ticket = await gateway.AuthenticateAsync(verifier, credential, TimeSpan.FromMinutes(15));
+```
+
+The file contains `Username`, `Subject`, `PasswordHash`, `Salt`, `Iterations`, `Disabled`, and
+optional `Claims`. Password verification uses PBKDF2-HMAC-SHA256 with a per-user random salt and a
+minimum iteration count. This provider is deliberately intended for development/small deployments;
+use PlayFab, EOS, or an OIDC provider when accounts, rotation, MFA, and audit requirements belong in
+a managed identity system.
 
 For a direct PlayFab integration, use `PlayFabSessionTicketVerifier`. It calls PlayFab's
 `https://<titleId>.playfabapi.com/Server/AuthenticateSessionTicket` endpoint with `X-SecretKey`
