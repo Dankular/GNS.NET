@@ -153,8 +153,7 @@ PlayFabAccountSession account = await playFab.RegisterAsync(
 // Existing accounts use:
 // PlayFabAccountSession account = await playFab.LoginAsync("player-name", password);
 
-PlayFabEntitySession playerEntity = account.EntitySession
-    ?? await playFab.GetEntityTokenAsync(account.SessionTicket);
+PlayFabEntitySession playerEntity = await playFab.EnsureEntitySessionAsync(account);
 
 // Register a dedicated server once with a stable 32-100 character ID.
 PlayFabEntitySession serverEntity = await playFab.RegisterServerAsync(
@@ -172,6 +171,10 @@ register a `game_server` entity. Lobby calls use `X-EntityToken`; clients join w
 `JoinLobbyAsServerAsync`. PlayFab requires an authenticated entity before Lobby operations and
 supports both client-owned and server-owned lobbies. See [Create Lobby](https://learn.microsoft.com/en-us/rest/api/playfab/multiplayer/lobby/create-lobby)
 and [Join Lobby](https://learn.microsoft.com/en-us/rest/api/playfab/multiplayer/lobby/join-lobby).
+
+Do not pass `PlayFabAccountSession.SessionTicket` directly to a Lobby method. Session tickets are
+for legacy Client/Server authentication; Lobby requires the entity token returned by
+`Authentication/GetEntityToken` and sends it as `X-EntityToken`.
 
 For a local two-process smoke test where Steamworks/native auth-ticket provisioning is unavailable,
 the POC supports an explicit development-only `--insecure` flag:

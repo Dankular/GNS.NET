@@ -18,8 +18,9 @@ public sealed class PlayFabClientTests
         PlayFabAccountSession registered = await client.RegisterAsync("dev@example.com", "password", "developer");
         PlayFabAccountSession loggedIn = await client.LoginAsync("developer", "password");
         PlayFabEntitySession entity = await client.GetEntityTokenAsync(loggedIn.SessionTicket);
+        PlayFabEntitySession ensured = await client.EnsureEntitySessionAsync(registered);
         Assert.Equal("PF-1", registered.PlayFabId); Assert.Equal("entity-1", registered.EntitySession?.EntityToken);
-        Assert.Equal("ticket-2", loggedIn.SessionTicket); Assert.Equal("entity-2", entity.EntityToken);
+        Assert.Equal("ticket-2", loggedIn.SessionTicket); Assert.Equal("entity-2", entity.EntityToken); Assert.Equal("entity-1", ensured.EntityToken);
         Assert.Equal("X-Authorization", handler.Requests[2].Headers.First().Key);
     }
 

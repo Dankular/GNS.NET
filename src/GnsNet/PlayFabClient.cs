@@ -57,6 +57,12 @@ public sealed class PlayFabRestClient
         return ParseEntitySession(response.RootElement);
     }
 
+    /// <summary>Returns the account's entity session, refreshing it from its login ticket when needed.</summary>
+    public Task<PlayFabEntitySession> EnsureEntitySessionAsync(PlayFabAccountSession account, CancellationToken cancellationToken = default)
+        => account.EntitySession is PlayFabEntitySession existing
+            ? Task.FromResult(existing)
+            : this.GetEntityTokenAsync(account.SessionTicket, cancellationToken: cancellationToken);
+
     /// <summary>Registers or retrieves a persistent PlayFab game_server entity for a process.</summary>
     public async Task<PlayFabEntitySession> RegisterServerAsync(string serverCustomId, string titleSecretKey, CancellationToken cancellationToken = default)
     {
