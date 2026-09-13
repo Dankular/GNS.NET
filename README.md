@@ -36,6 +36,18 @@ the registered guards before application handlers run.
 `ConnectTokenService` backed by a web backend or matchmaker-issued short-lived token; set
 `RequireApplicationAdmission = false` only for an intentionally open development server.
 
+For a local two-process smoke test where Steamworks/native auth-ticket provisioning is unavailable,
+the POC supports an explicit development-only `--insecure` flag:
+
+```powershell
+dotnet run --project samples/Poc/Poc.Server -- --insecure --duration-seconds 15
+dotnet run --project samples/Poc/Poc.Client -- 127.0.0.1:27015 --insecure --duration-seconds 10
+```
+
+Both processes must receive the flag. It disables native authentication/encryption checks and
+skips native authentication initialization; it is not a replacement for production auth and must
+never be enabled on an internet-facing server.
+
 ## Opinionated framework API
 
 Applications can use `GnsAuthoritativeServer<TSessionId, TState, TInput>` and

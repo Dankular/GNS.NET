@@ -25,6 +25,17 @@ the reusable [`GnsNet`](../../src/GnsNet) library and its MemoryPack/versioned-f
 Terminal 1: `dotnet run --project samples/Poc/Poc.Server`
 Terminal 2 (after the server prints "Listening..."): `dotnet run --project samples/Poc/Poc.Client`
 
+For a local loopback smoke test without Steamworks auth-ticket setup, pass `--insecure` to both
+processes. This is intentionally opt-in and disables native authentication/encryption checks; it
+must not be used on a public or production server:
+
+Terminal 1: `dotnet run --project samples/Poc/Poc.Server -- --insecure --duration-seconds 15`
+Terminal 2: `dotnet run --project samples/Poc/Poc.Client -- 127.0.0.1:27015 --insecure --duration-seconds 10`
+
+The duration flag makes the two-process test CI-friendly. The client should print `Connected to
+server.` followed by advancing server ticks and positions; the server should print its connection
+event. Omit `--duration-seconds` for the interactive Ctrl+C mode.
+
 The client's input isn't real keyboard/controller input - it's a deterministic scripted
 pattern (`ScriptedInput` in `Poc.Shared`) that cycles right / down / left / up every 2 seconds,
 so a run is reproducible without a human at the keyboard.

@@ -21,7 +21,8 @@ public sealed class GnsClient : IDisposable
     private readonly FnSteamNetConnectionStatusChanged statusChangedCallback;
 
     private bool disposed;
-    public TransportSecurityPolicy SecurityPolicy { get; init; } = new();
+    /// <summary>Connection admission policy. Set before the asynchronous connection reaches Connected.</summary>
+    public TransportSecurityPolicy SecurityPolicy { get; set; } = new();
 
     private GnsClient(ISteamNetworkingSockets sockets, HSteamNetConnection connectionHandle, FnSteamNetConnectionStatusChanged statusChangedCallback, int maxMessagesPerPoll)
     {

@@ -5,15 +5,23 @@ using GnsNet.Poc;
 using GnsSharp;
 
 string address = args.Length > 0 ? args[0] : "127.0.0.1:27015";
+bool insecure = args.Any(arg => string.Equals(arg, "--insecure", StringComparison.OrdinalIgnoreCase));
+int durationSeconds = ReadDuration(args);
 
 Console.WriteLine("GNS.NET POC Client");
 
 using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions
 {
     DebugOutput = (level, msg) => Console.WriteLine($"[{level}] {msg}"),
+    RequireNativeAuthentication = !insecure,
 });
 
 using GnsClient client = GnsClient.Connect(address);
+if (insecure)
+{
+    client.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
+    Console.WriteLine("WARNING: --insecure disables native authentication/encryption checks for local development only.");
+}
 
 bool connected = false;
 client.Connected += () =>
@@ -24,6 +32,7 @@ client.Connected += () =>
 client.Disconnected += (reason, debug) => Console.WriteLine($"Disconnected: {reason} ({debug})");
 
 using CancellationTokenSource cts = new();
+if (durationSeconds > 0) cts.CancelAfter(TimeSpan.FromSeconds(durationSeconds));
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
@@ -69,3 +78,11 @@ await tickLoop.RunAsync((tick, _) =>
 }, cts.Token);
 
 Console.WriteLine("Client stopped.");
+
+static int ReadDuration(string[] arguments)
+{
+    for (int i = 0; i + 1 < arguments.Length; i++)
+        if (string.Equals(arguments[i], "--duration-seconds", StringComparison.OrdinalIgnoreCase) && int.TryParse(arguments[i + 1], out int seconds) && seconds > 0)
+            return seconds;
+    return 0;
+}
