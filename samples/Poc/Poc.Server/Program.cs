@@ -28,43 +28,30 @@ Console.CancelKeyPress += (_, e) =>
 
 Console.WriteLine($"Listening on {ListenAddress} - press Ctrl+C to stop.");
 
-// The one entity this POC's server is authoritative over.
-float x = 0f;
-float y = 0f;
-
-// Last input received from the (single, unauthenticated) client. Applied every tick regardless
-// of when during the tick it arrived - this POC does not timestamp or buffer input by tick.
-sbyte inputDx = 0;
-sbyte inputDy = 0;
+// The simulation owns truth; the client can submit only bounded directional input.
+var inputGuard = new ServerInputGuard<string, ClientInput>((_, value) => value.Dx is >= -1 and <= 1 && value.Dy is >= -1 and <= 1);
+var simulation = new AuthoritativeServer<string, ServerState, ClientInput>(new ServerState(),
+    (state, _, value) => new ServerState { X = state.X + value.Dx * SpeedPerTick, Y = state.Y + value.Dy * SpeedPerTick },
+    inputGuard: inputGuard);
+simulation.AddClient("poc-client");
 
 var tickLoop = new TickLoop(Protocol.TickInterval);
 await tickLoop.RunAsync((tick, _) =>
 {
     foreach (ReceivedMessage message in server.Poll())
     {
-        var reader = new PacketReader(message.Data);
-        if (reader.Remaining < 1)
+        try
         {
-            continue;
+            NetFrame frame = NetFrame.Decode(message.Data);
+            if (frame.Opcode == Protocol.OpcodeClientInput && NetSerializer.Deserialize<ClientInput>(frame.Payload) is ClientInput input)
+                simulation.SubmitInput("poc-client", frame.Tick, input);
         }
-
-        byte opcode = reader.ReadByte();
-        if (opcode == Protocol.OpcodeClientInput && reader.Remaining >= 2)
-        {
-            inputDx = reader.ReadSByte();
-            inputDy = reader.ReadSByte();
-        }
+        catch (InvalidDataException) { }
     }
 
-    x += inputDx * SpeedPerTick;
-    y += inputDy * SpeedPerTick;
-
-    var writer = new PacketWriter();
-    writer.WriteByte(Protocol.OpcodeServerState);
-    writer.WriteUInt32(tick);
-    writer.WriteFloat(x);
-    writer.WriteFloat(y);
-    server.Broadcast(writer.WrittenSpan, ESteamNetworkingSendType.UnreliableNoDelay);
+    simulation.Advance();
+    ServerState state = simulation.State;
+    server.Broadcast(new NetFrame(Protocol.OpcodeServerState, tick, NetSerializer.Serialize(new ServerState { Tick = tick, X = state.X, Y = state.Y })).Encode(), ESteamNetworkingSendType.UnreliableNoDelay);
 }, cts.Token);
 
 Console.WriteLine("Server stopped.");

@@ -59,12 +59,40 @@ public sealed class GnsRuntime : IDisposable, IAsyncDisposable
             throw new InvalidOperationException($"GameNetworkingSockets_Init failed: {errMsg}");
         }
 
+        if (options.RequireNativeAuthentication)
+        {
+            ESteamNetworkingAvailability availability = ISteamNetworkingSockets.User!.InitAuthentication();
+            if (availability is ESteamNetworkingAvailability.Failed or ESteamNetworkingAvailability.CannotTry)
+            {
+                GameNetworkingSockets.Kill();
+                System.Runtime.InteropServices.NativeLibrary.Free(nativeLibrary);
+                throw new InvalidOperationException($"Native GNS authentication is unavailable: {availability}.");
+            }
+        }
+
+        if (options.Impairment is not null)
+        {
+            GnsNativeConfiguration.Apply(options, new GnsUtilsConfigurationSink(ISteamNetworkingUtils.User!));
+        }
+        else if (options.P2P is not null)
+        {
+            GnsNativeConfiguration.Apply(options, new GnsUtilsConfigurationSink(ISteamNetworkingUtils.User!));
+        }
+
         if (options.DebugOutput is not null)
         {
             ISteamNetworkingUtils.User!.SetDebugOutputFunction(options.DebugOutputLevel, options.DebugOutput);
         }
 
         return new GnsRuntime(nativeLibrary, options);
+    }
+
+    private sealed class GnsUtilsConfigurationSink : IGnsNativeConfigurationSink
+    {
+        private readonly ISteamNetworkingUtils utils;
+        public GnsUtilsConfigurationSink(ISteamNetworkingUtils utils) => this.utils = utils;
+        public void SetInt32(ESteamNetworkingConfigValue key, int value) => this.utils.SetGlobalConfigValueInt32(key, value);
+        public void SetString(ESteamNetworkingConfigValue key, string value) => this.utils.SetGlobalConfigValueString(key, value);
     }
 
     /// <summary>

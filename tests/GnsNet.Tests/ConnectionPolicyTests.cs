@@ -1,0 +1,261 @@
+namespace GnsNet.Tests;
+
+using GnsNet;
+using Xunit;
+using GnsSharp;
+using System.Collections.Generic;
+
+public sealed class ConnectionPolicyTests
+{
+    private sealed class ConfigurationSink : IGnsNativeConfigurationSink
+    {
+        public readonly Dictionary<ESteamNetworkingConfigValue, int> Integers = new();
+        public readonly Dictionary<ESteamNetworkingConfigValue, string> Strings = new();
+        public void SetInt32(ESteamNetworkingConfigValue key, int value) => Integers[key] = value;
+        public void SetString(ESteamNetworkingConfigValue key, string value) => Strings[key] = value;
+    }
+
+    [Fact]
+    public void NativeConfiguration_MapsImpairmentAndP2PSettings()
+    {
+        var sink = new ConfigurationSink();
+        var options = new GnsRuntimeOptions
+        {
+            Impairment = new GnsImpairmentOptions { LossSendPercent = 4, LagReceiveMilliseconds = 17 },
+            P2P = new GnsP2POptions { IceCandidatePolicy = 1, StunServerList = "stun.example.test:3478" }
+        };
+        GnsNativeConfiguration.Apply(options, sink);
+        Assert.Equal(4, sink.Integers[ESteamNetworkingConfigValue.FakePacketLoss_Send]);
+        Assert.Equal(17, sink.Integers[ESteamNetworkingConfigValue.FakePacketLag_Recv]);
+        Assert.Equal(1, sink.Integers[ESteamNetworkingConfigValue.P2P_Transport_ICE_Enable]);
+        Assert.Equal("stun.example.test:3478", sink.Strings[ESteamNetworkingConfigValue.P2P_STUN_ServerList]);
+    }
+    [Fact]
+    public void TransportPolicy_RejectsUnauthenticatedOrUnencryptedConnections()
+    {
+        var policy = new TransportSecurityPolicy();
+        var unauthenticated = new SteamNetConnectionInfo_t { Flags = ESteamNetworkConnectionInfoFlags.Unauthenticated };
+        var unencrypted = new SteamNetConnectionInfo_t { Flags = ESteamNetworkConnectionInfoFlags.Unencrypted };
+        Assert.False(policy.Accept(unauthenticated, out _));
+        Assert.False(policy.Accept(unencrypted, out _));
+    }
+    [Fact]
+    public void NativeAuthentication_ReportsBackendTicketCapability()
+    {
+        Assert.True(NativeAuthentication.Capabilities.CertificateTransportValidation);
+        Assert.False(NativeAuthentication.Capabilities.SteamAuthTickets);
+        Assert.Contains("Steam", NativeAuthentication.Capabilities.Limitation);
+    }
+
+    [Fact]
+    public void P2PArguments_RejectInvalidValuesBeforeNativeCall()
+    {
+        Assert.Throws<ArgumentException>(() => GnsClient.ConnectP2P(""));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GnsClient.ConnectP2P("localhost", -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GnsServer.ListenP2P(-1));
+    }
+
+    [Fact]
+    public void Impairment_ValidatesBothDirectionsAndJitterBounds()
+    {
+        new GnsImpairmentOptions { LossSendPercent = 10, LossReceivePercent = 20, JitterSendAverageMilliseconds = 2, JitterSendMaximumMilliseconds = 5, JitterReceiveAverageMilliseconds = 3, JitterReceiveMaximumMilliseconds = 7 }.Validate();
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GnsImpairmentOptions { JitterReceiveAverageMilliseconds = 8, JitterReceiveMaximumMilliseconds = 2 }.Validate());
+    }
+
+    [Fact]
+    public void P2POptions_ValidateIceAndStunConfiguration()
+    {
+        new GnsP2POptions { IceCandidatePolicy = 1, StunServerList = "stun.example.test:3478" }.Validate();
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GnsP2POptions { IceCandidatePolicy = -1 }.Validate());
+        Assert.Throws<ArgumentException>(() => new GnsP2POptions { StunServerList = new string('x', 4097) }.Validate());
+    }
+
+    [Fact]
+    public void ControlTraffic_IsNotSubjectToGameplayFloodBucket()
+    {
+        Assert.True(GnsServerHost<string>.IsControlOpcode(GnsServerHost<string>.HeartbeatOpcode));
+        Assert.True(GnsServerHost<string>.IsControlOpcode(GnsServerHost<string>.GracefulDisconnectOpcode));
+        Assert.False(GnsServerHost<string>.IsControlOpcode(42));
+    }
+
+    [Fact]
+    public void ServerHost_RequiresApplicationAdmissionByDefault()
+    {
+        Assert.True(GnsServerHost<string>.DefaultRequireApplicationAdmission);
+    }
+
+    [Fact]
+    public async Task TokenBucket_EnforcesBurstAtomicallyAcrossConcurrentConsumers()
+    {
+        var limiter = new TokenBucketRateLimiter(1, 10); int accepted = 0;
+        await Task.WhenAll(Enumerable.Range(0, 100).Select(_ => Task.Run(() => { if (limiter.TryConsume()) Interlocked.Increment(ref accepted); })));
+        Assert.Equal(10, accepted);
+    }
+
+    [Fact]
+    public void InputGuard_FailsClosedWhenValidatorThrows()
+    {
+        var guard = new ServerInputGuard<string, int>((_, _) => throw new InvalidOperationException(), 10, 2);
+        Assert.False(guard.TryAccept("p", 1));
+    }
+
+    [Fact]
+    public async Task ReconnectableClient_GracefulDisconnectDisablesReconnectLoop()
+    {
+        var reconnect = new ReconnectableClient(() => throw new InvalidOperationException());
+        Assert.True(reconnect.ReconnectEnabled);
+        reconnect.DisconnectGracefully();
+        Assert.False(reconnect.ReconnectEnabled);
+        await reconnect.DisposeAsync();
+    }
+    [Fact]
+    public void Token_RejectsTamperingAndExpiry()
+    {
+        var service = new ConnectTokenService(new byte[32]);
+        string token = service.Issue("player-1", TimeSpan.FromMinutes(1), DateTimeOffset.UnixEpoch);
+        Assert.True(service.TryValidate(token, out ConnectClaims claims, DateTimeOffset.UnixEpoch.AddSeconds(1)));
+        Assert.Equal("player-1", claims.SessionId);
+        Assert.False(service.TryValidate(token + "x", out _, DateTimeOffset.UnixEpoch.AddSeconds(1)));
+        Assert.False(service.TryValidate(token, out _, DateTimeOffset.UnixEpoch.AddMinutes(2)));
+        Assert.Throws<ArgumentException>(() => service.Issue("bad|session", TimeSpan.FromMinutes(1)));
+    }
+
+    [Fact]
+    public void Admission_ReleasesNonceForSessionResumption()
+    {
+        var admission = new ConnectionAdmission(new ConnectTokenService(new byte[32]));
+        string token = new ConnectTokenService(new byte[32]).Issue("player", TimeSpan.FromMinutes(1));
+        Assert.True(admission.TryAdmit(token, out ConnectClaims claims));
+        Assert.False(admission.TryAdmit(token, out _));
+        Assert.True(admission.Release(claims.Nonce));
+        Assert.True(admission.TryAdmit(token, out _));
+    }
+
+    [Fact]
+    public void SessionRegistry_DistinguishesFirstAttachFromResumption()
+    {
+        var registry = new ServerSessionRegistry<string>(TimeSpan.FromMinutes(1));
+        var connection = new GnsConnection(default);
+        Assert.False(registry.Attach("player", connection, DateTimeOffset.UnixEpoch));
+        registry.Detach("player", DateTimeOffset.UnixEpoch);
+        Assert.True(registry.Attach("player", connection, DateTimeOffset.UnixEpoch.AddSeconds(1)));
+    }
+
+    [Fact]
+    public void Heartbeat_SeparatesGameTimeoutFromTransport()
+    {
+        var monitor = new HeartbeatMonitor<string>(TimeSpan.FromSeconds(5));
+        monitor.Touch("p", DateTimeOffset.UnixEpoch);
+        Assert.Equal(HeartbeatStatus.Alive, monitor.GetStatus("p", DateTimeOffset.UnixEpoch.AddSeconds(5)));
+        Assert.Equal(HeartbeatStatus.TimedOut, monitor.GetStatus("p", DateTimeOffset.UnixEpoch.AddSeconds(6)));
+    }
+
+    [Fact]
+    public async Task HeartbeatMonitor_IsSafeAcrossTouchAndPollThreads()
+    {
+        var monitor = new HeartbeatMonitor<int>(TimeSpan.FromSeconds(1));
+        await Task.WhenAll(Enumerable.Range(0, 100).Select(i => Task.Run(() => { monitor.Touch(i); monitor.GetStatus(i); monitor.Poll(); })));
+        Assert.Equal(HeartbeatStatus.Alive, monitor.GetStatus(99));
+    }
+
+    [Fact]
+    public void HeartbeatTracker_MeasuresAcknowledgementAndRejectsDuplicates()
+    {
+        var tracker = new HeartbeatTracker(); var metrics = new ConnectionMetrics(); byte[] probe = tracker.CreateProbe(metrics);
+        Assert.True(tracker.Acknowledge(probe, metrics)); Assert.False(tracker.Acknowledge(probe, metrics)); Assert.True(metrics.RttMilliseconds >= 0);
+    }
+
+    [Fact]
+    public async Task HeartbeatTracker_IsSafeAcrossProbeAndAckThreads()
+    {
+        var tracker = new HeartbeatTracker(); var metrics = new ConnectionMetrics(); var probes = new System.Collections.Concurrent.ConcurrentBag<byte[]>();
+        await Task.WhenAll(Enumerable.Range(0, 100).Select(_ => Task.Run(() => probes.Add(tracker.CreateProbe()))));
+        Assert.Equal(100, probes.Count); foreach (byte[] probe in probes) Assert.True(tracker.Acknowledge(probe, metrics));
+    }
+
+    [Fact]
+    public void Metrics_UsesBoundedProbeLossWindow()
+    {
+        var metrics = new ConnectionMetrics();
+        for (int i = 0; i < 200; i++) { metrics.RecordSequenceAcknowledged(); }
+        Assert.Equal(0, metrics.PacketLossPercent);
+        for (int i = 0; i < 128; i++) metrics.RecordLostPacket();
+        Assert.Equal(100, metrics.PacketLossPercent);
+    }
+
+    [Fact]
+    public void MetricsOverlay_ExposesConnectionHealth()
+    {
+        var metrics = new ConnectionMetrics(); metrics.RecordIn(10); metrics.RecordOut(20); metrics.RecordRtt(TimeSpan.FromMilliseconds(12.5));
+        ConnectionMetricsSnapshot snapshot = NetworkDebugOverlay.Snapshot("player-1", metrics); string text = NetworkDebugOverlay.Format(snapshot);
+        Assert.Contains("player-1", text); Assert.Contains("12.5 ms", text); Assert.Contains("IN 1 pkts/10 B", text); Assert.Contains("OUT 1 pkts/20 B", text);
+    }
+
+    [Fact]
+    public async Task Recorder_PersistsAndLoadsCapture()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"gnsnet-{Guid.NewGuid():N}.capture");
+        try
+        {
+            var recorder = new NetworkRecorder();
+            recorder.Record(true, [1, 2], DateTimeOffset.UnixEpoch, "session-7", NetChannel.Event);
+            await recorder.SaveAsync(path);
+            NetworkRecorder loaded = await NetworkRecorder.LoadAsync(path);
+            Assert.Single(loaded.Packets);
+            Assert.Equal(new byte[] { 1, 2 }, loaded.Packets[0].Data);
+            Assert.Equal("session-7", loaded.Packets[0].ConnectionId);
+            Assert.Equal(NetChannel.Event, loaded.Packets[0].Channel);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task Recorder_RejectsTruncatedCapture()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"gnsnet-{Guid.NewGuid():N}.capture");
+        try { await File.WriteAllBytesAsync(path, [0x52, 0x53, 0x4E, 0x47, 2]); await Assert.ThrowsAsync<EndOfStreamException>(() => NetworkRecorder.LoadAsync(path)); }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task Recorder_ReplaysOutboundTransportPacketsInOrder()
+    {
+        var recorder = new NetworkRecorder();
+        recorder.Record(true, [1], DateTimeOffset.UnixEpoch);
+        recorder.Record(false, [2], DateTimeOffset.UnixEpoch.AddMilliseconds(1));
+        recorder.Record(true, [3], DateTimeOffset.UnixEpoch.AddMilliseconds(2));
+        var sent = new List<byte[]>();
+        int delivered = await recorder.ReplayTransportAsync(packet => { sent.Add(packet.Data); return ValueTask.FromResult(true); });
+        Assert.Equal(2, delivered);
+        Assert.Equal(new byte[] { 1 }, sent[0]);
+        Assert.Equal(new byte[] { 3 }, sent[1]);
+    }
+
+    [Fact]
+    public async Task Recorder_IsSafeForConcurrentHostTraffic()
+    {
+        var recorder = new NetworkRecorder();
+        await Task.WhenAll(Enumerable.Range(0, 100).Select(i => Task.Run(() => recorder.Record(i % 2 == 0, [1, 2, 3], connectionId: i.ToString()))));
+        Assert.Equal(100, recorder.Packets.Count);
+    }
+
+    [Fact]
+    public void AdaptiveTickController_HasRecoveryHysteresis()
+    {
+        var controller = new AdaptiveTickController(TimeSpan.FromMilliseconds(50));
+        var policy = new LoadSheddingPolicy { ReduceTickCpuPercent = 80 };
+        Assert.Equal(TimeSpan.FromMilliseconds(100), controller.Update(new ServerLoad(1, 50, 90, 0), policy));
+        Assert.Equal(TimeSpan.FromMilliseconds(100), controller.Update(new ServerLoad(1, 50, 75, 0), policy));
+        Assert.Equal(TimeSpan.FromMilliseconds(50), controller.Update(new ServerLoad(1, 50, 69, 0), policy));
+    }
+
+    [Fact]
+    public void LoadShedding_RejectsBacklogAndOverlongTicks()
+    {
+        var policy = new LoadSheddingPolicy { MaximumConnections = 10, MaximumPendingMessages = 5, MaximumTickMilliseconds = 20, RejectCpuPercent = 90 };
+        Assert.True(policy.AllowConnection(new ServerLoad(1, 10, 50, 5)));
+        Assert.False(policy.AllowConnection(new ServerLoad(1, 10, 50, 6)));
+        Assert.False(policy.AllowConnection(new ServerLoad(1, 21, 50, 0)));
+        Assert.False(policy.AllowConnection(new ServerLoad(1, 10, 90, 0)));
+    }
+}

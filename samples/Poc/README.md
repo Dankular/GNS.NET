@@ -5,7 +5,7 @@ holding one entity's position, a client sending scripted directional input, and 
 tick-numbered state broadcast/reconciliation. Built and run as two separate processes.
 
 Where the original POC hand-rolled everything in each `Program.cs`, this version is built on
-the reusable [`GnsNet`](../../src/GnsNet) library in this repository - see the root
+the reusable [`GnsNet`](../../src/GnsNet) library and its MemoryPack/versioned-frame APIs - see the root
 [README](../../README.md) for what that library provides and why it exists.
 
 ## Prerequisites
@@ -29,23 +29,26 @@ The client's input isn't real keyboard/controller input - it's a deterministic s
 pattern (`ScriptedInput` in `Poc.Shared`) that cycles right / down / left / up every 2 seconds,
 so a run is reproducible without a human at the keyboard.
 
-## Protocol (intentionally minimal - not production framing)
+## Protocol
 Defined once, in `Poc.Shared/Protocol.cs`, and used by both ends:
-- Client -> Server: `[0x01][sbyte dx][sbyte dy]`, sent `UnreliableNoDelay` every 50ms.
-- Server -> Client: `[0x02][uint32 tick][float x][float y]`, sent `UnreliableNoDelay` every
-  tick (50ms). The client discards any state packet whose tick isn't newer than the last one
-  it applied (`TickSequence.IsNewer`, from `GnsNet`).
+- Client -> Server: `NetFrame(0x01, tick, ClientInput)`, MemoryPack-serialized and sent
+  `UnreliableNoDelay` every 50ms.
+- Server -> Client: `NetFrame(0x02, tick, ServerState)`, MemoryPack-serialized and sent
+  `UnreliableNoDelay` every tick (50ms). The client discards any state packet whose tick isn't newer
+  than the last one it applied (`TickSequence.IsNewer`, from `GnsNet`).
 
-The bytes themselves are packed with `GnsNet`'s `PacketWriter`/`PacketReader` (big-endian),
-rather than by hand with `BitConverter` in each `Program.cs` - but the wire format and framing
-choices are exactly as minimal as the original POC's.
+`NetFrame` carries protocol and schema revisions and rejects malformed or unsupported payloads
+before deserialization.
+The server routes decoded inputs through `ServerInputGuard` and `AuthoritativeServer`; client
+claims never directly mutate authoritative state.
 
 ## What this does NOT cover
 - Client-side prediction or interpolation (the client just displays raw server state).
 - Reconnect/timeout handling, lag compensation, delta compression.
 - Authentication, or any protection against a malicious client.
-- Anything resembling a real serialization format - this is still hand-packed bytes, just
-  through a shared helper instead of duplicated inline.
+- Full prediction/interpolation, reconnect/session grace, lag compensation, and admission policies;
+  those are available through the reusable framework hosts and pipelines in `src/GnsNet` and are
+  intentionally separate from this one-entity demonstration.
 
 `GnsServer` (the library type this sample's server is built on) does support multiple
 simultaneous client connections via a poll group - unlike the original POC, that part isn't a

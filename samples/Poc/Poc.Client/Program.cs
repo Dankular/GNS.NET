@@ -46,30 +46,14 @@ var tickLoop = new TickLoop(Protocol.TickInterval);
 await tickLoop.RunAsync((tick, _) =>
 {
     (sbyte dx, sbyte dy) = ScriptedInput.At(tick);
-
-    var writer = new PacketWriter();
-    writer.WriteByte(Protocol.OpcodeClientInput);
-    writer.WriteSByte(dx);
-    writer.WriteSByte(dy);
-    client.Send(writer.WrittenSpan, ESteamNetworkingSendType.UnreliableNoDelay);
+    client.Send(new NetFrame(Protocol.OpcodeClientInput, tick, NetSerializer.Serialize(new ClientInput { Dx = dx, Dy = dy })).Encode(), ESteamNetworkingSendType.UnreliableNoDelay);
 
     foreach (ReceivedMessage message in client.Poll())
     {
-        var reader = new PacketReader(message.Data);
-        if (reader.Remaining < 1)
-        {
-            continue;
-        }
-
-        byte opcode = reader.ReadByte();
-        if (opcode != Protocol.OpcodeServerState || reader.Remaining < 12)
-        {
-            continue;
-        }
-
-        uint serverTick = reader.ReadUInt32();
-        float x = reader.ReadFloat();
-        float y = reader.ReadFloat();
+        ServerState? state;
+        try { NetFrame frame = NetFrame.Decode(message.Data); if (frame.Opcode != Protocol.OpcodeServerState || (state = NetSerializer.Deserialize<ServerState>(frame.Payload)) is null) continue; }
+        catch (InvalidDataException) { continue; }
+        uint serverTick = state.Tick; float x = state.X; float y = state.Y;
 
         // Discard any state packet whose tick isn't newer than the last one we applied - the
         // wire is unreliable and unordered, so a stale or duplicate packet can arrive at any time.

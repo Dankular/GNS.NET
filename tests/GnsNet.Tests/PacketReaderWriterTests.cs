@@ -6,6 +6,39 @@ using Xunit;
 public class PacketReaderWriterTests
 {
     [Fact]
+    public void Reader_ReportsTruncationAsInvalidData()
+    {
+        Assert.Throws<InvalidDataException>(() => new PacketReader([]).ReadUInt32());
+        Assert.Throws<InvalidDataException>(() => NetFrame.Decode([NetFrame.CurrentVersion]));
+    }
+
+    [Fact]
+    public void FrameAndBatch_RejectOversizedInput()
+    {
+        Assert.Throws<ArgumentException>(() => new NetFrame(1, 0, new byte[NetFrame.MaxPayloadBytes + 1]).Encode());
+        var batch = new NetBatch();
+        for (int i = 0; i < NetBatch.MaxFrames + 1; i++) batch.Add(new NetFrame(1, 0, []));
+        Assert.Throws<InvalidOperationException>(() => batch.Encode());
+    }
+
+    [Fact]
+    public void Batch_RejectsTotalSizeLimit()
+    {
+        var batch = new NetBatch();
+        for (int i = 0; i < 8; i++) batch.Add(new NetFrame(1, 0, new byte[NetFrame.MaxPayloadBytes]));
+        Assert.Throws<InvalidOperationException>(() => batch.Encode());
+        Assert.Throws<InvalidDataException>(() => NetBatch.Decode(new byte[NetBatch.MaxBatchBytes + 1]));
+    }
+
+    [Fact]
+    public void Frame_RejectsUnsupportedSchemaVersion()
+    {
+        Assert.Throws<InvalidOperationException>(() => new NetFrame(1, 0, []) { SchemaVersion = 2 }.Encode());
+        byte[] encoded = new NetFrame(1, 0, []).Encode(); encoded[1] = 2;
+        Assert.Throws<InvalidDataException>(() => NetFrame.Decode(encoded));
+    }
+
+    [Fact]
     public void RoundTrips_AllSupportedTypes()
     {
         var writer = new PacketWriter();

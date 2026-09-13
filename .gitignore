@@ -1,6 +1,7 @@
 ## .NET
 bin/
 obj/
+artifacts/
 *.user
 
 ## Native libraries you build yourself (see README) — not vendored in this repo

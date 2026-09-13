@@ -21,6 +21,7 @@ public sealed class GnsClient : IDisposable
     private readonly FnSteamNetConnectionStatusChanged statusChangedCallback;
 
     private bool disposed;
+    public TransportSecurityPolicy SecurityPolicy { get; init; } = new();
 
     private GnsClient(ISteamNetworkingSockets sockets, HSteamNetConnection connectionHandle, FnSteamNetConnectionStatusChanged statusChangedCallback, int maxMessagesPerPoll)
     {
@@ -71,9 +72,38 @@ public sealed class GnsClient : IDisposable
         return client;
     }
 
+    /// <summary>Begins a native GNS P2P connection, allowing GNS to negotiate ICE/SDR paths.</summary>
+    /// <param name="remoteIdentity">GNS identity string of the remote peer.</param>
+    /// <param name="virtualPort">Virtual port selected by the listening P2P socket.</param>
+    /// <param name="maxMessagesPerPoll">Maximum messages retained by each poll call.</param>
+    public static GnsClient ConnectP2P(string remoteIdentity, int virtualPort = 0, int maxMessagesPerPoll = 64)
+    {
+        if (string.IsNullOrWhiteSpace(remoteIdentity)) throw new ArgumentException("A remote GNS identity is required.", nameof(remoteIdentity));
+        if (virtualPort < 0) throw new ArgumentOutOfRangeException(nameof(virtualPort));
+        ISteamNetworkingSockets sockets = ISteamNetworkingSockets.User
+            ?? throw new InvalidOperationException($"{nameof(GnsRuntime)}.{nameof(GnsRuntime.Initialize)} must be called before connecting.");
+        SteamNetworkingIdentity identity = default;
+        if (!identity.ParseString(remoteIdentity)) throw new ArgumentException($"Could not parse GNS identity '{remoteIdentity}'.", nameof(remoteIdentity));
+        GnsClient? client = null;
+        FnSteamNetConnectionStatusChanged callback = (ref SteamNetConnectionStatusChangedCallback_t status) => client?.OnConnectionStatusChanged(ref status);
+        Span<SteamNetworkingConfigValue_t> configs = stackalloc SteamNetworkingConfigValue_t[1];
+        configs[0].SetPtr(ESteamNetworkingConfigValue.Callback_ConnectionStatusChanged, Marshal.GetFunctionPointerForDelegate(callback));
+        HSteamNetConnection connectionHandle = sockets.ConnectP2P(in identity, virtualPort, configs);
+        configs[0].Dispose();
+        client = new GnsClient(sockets, connectionHandle, callback, maxMessagesPerPoll);
+        return client;
+    }
+
     /// <summary>Sends to the server.</summary>
     public EResult Send(ReadOnlySpan<byte> data, ESteamNetworkingSendType sendType)
         => this.sockets.SendMessageToConnection(this.connectionHandle, data, sendType);
+
+    public void Close(string reason = "Client quit")
+    {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.sockets.CloseConnection(this.connectionHandle, 0, reason, false);
+    }
 
     /// <summary>
     /// Drains up to <c>maxMessagesPerPoll</c> (see <see cref="Connect"/>) pending messages from the
@@ -114,7 +144,7 @@ public sealed class GnsClient : IDisposable
         }
 
         this.disposed = true;
-        this.sockets.CloseConnection(this.connectionHandle, 0, "Client closing", false);
+        this.sockets.CloseConnection(this.connectionHandle, 0, "Client disposed", false);
     }
 
     private void OnConnectionStatusChanged(ref SteamNetConnectionStatusChangedCallback_t status)
@@ -122,6 +152,12 @@ public sealed class GnsClient : IDisposable
         switch (status.Info.State)
         {
             case ESteamNetworkingConnectionState.Connected:
+                if (!this.SecurityPolicy.Accept(status.Info, out string? securityReason))
+                {
+                    this.sockets.CloseConnection(status.Conn, 1, securityReason, false);
+                    this.Disconnected?.Invoke(ESteamNetConnectionEnd.Local_NetworkConfig, securityReason);
+                    break;
+                }
                 this.Connected?.Invoke();
                 break;
 

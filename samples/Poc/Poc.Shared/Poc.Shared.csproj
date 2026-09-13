@@ -4,4 +4,9 @@
     <RootNamespace>GnsNet.Poc</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MemoryPack" Version="1.21.4" />
+    <ProjectReference Include="../../../src/GnsNet/GnsNet.csproj" />
+  </ItemGroup>
+
 </Project>

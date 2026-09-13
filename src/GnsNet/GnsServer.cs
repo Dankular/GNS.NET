@@ -26,6 +26,7 @@ public sealed class GnsServer : IDisposable
     private readonly FnSteamNetConnectionStatusChanged statusChangedCallback;
 
     private bool disposed;
+    public TransportSecurityPolicy SecurityPolicy { get; init; } = new();
 
     private GnsServer(ISteamNetworkingSockets sockets, HSteamListenSocket listenSocket, HSteamNetPollGroup pollGroup, FnSteamNetConnectionStatusChanged statusChangedCallback, int maxMessagesPerPoll)
     {
@@ -36,7 +37,7 @@ public sealed class GnsServer : IDisposable
         this.messageBuffer = new IntPtr[maxMessagesPerPoll];
     }
 
-    /// <summary>Raised when a client connection is accepted.</summary>
+    /// <summary>Raised after a client reaches Connected and passes native security policy.</summary>
     public event Action<GnsConnection>? ClientConnected;
 
     /// <summary>Raised when a client connection closes, whether by the peer or locally-detected problem.</summary>
@@ -86,6 +87,23 @@ public sealed class GnsServer : IDisposable
         return server;
     }
 
+    /// <summary>Creates a native GNS P2P listener for ICE/SDR rendezvous connections.</summary>
+    public static GnsServer ListenP2P(int virtualPort = 0, int maxMessagesPerPoll = 64)
+    {
+        if (virtualPort < 0) throw new ArgumentOutOfRangeException(nameof(virtualPort));
+        ISteamNetworkingSockets sockets = ISteamNetworkingSockets.User
+            ?? throw new InvalidOperationException($"{nameof(GnsRuntime)}.{nameof(GnsRuntime.Initialize)} must be called before listening.");
+        GnsServer? server = null;
+        FnSteamNetConnectionStatusChanged callback = (ref SteamNetConnectionStatusChangedCallback_t status) => server?.OnConnectionStatusChanged(ref status);
+        Span<SteamNetworkingConfigValue_t> configs = stackalloc SteamNetworkingConfigValue_t[1];
+        configs[0].SetPtr(ESteamNetworkingConfigValue.Callback_ConnectionStatusChanged, Marshal.GetFunctionPointerForDelegate(callback));
+        HSteamListenSocket listenSocket = sockets.CreateListenSocketP2P(virtualPort, configs);
+        configs[0].Dispose();
+        HSteamNetPollGroup pollGroup = sockets.CreatePollGroup();
+        server = new GnsServer(sockets, listenSocket, pollGroup, callback, maxMessagesPerPoll);
+        return server;
+    }
+
     /// <summary>Sends to one connection.</summary>
     public EResult Send(GnsConnection connection, ReadOnlySpan<byte> data, ESteamNetworkingSendType sendType)
         => this.sockets.SendMessageToConnection(connection.Handle, data, sendType);
@@ -98,6 +116,10 @@ public sealed class GnsServer : IDisposable
             this.sockets.SendMessageToConnection(connection.Handle, data, sendType);
         }
     }
+
+    /// <summary>Rejects an unauthenticated or otherwise inadmissible connection immediately.</summary>
+    public void Reject(GnsConnection connection, string reason = "Connection not admitted")
+        => this.sockets.CloseConnection(connection.Handle, 1, reason, false);
 
     /// <summary>
     /// Drains up to <c>maxMessagesPerPoll</c> (see <see cref="Listen"/>) pending messages across all
@@ -163,9 +185,15 @@ public sealed class GnsServer : IDisposable
                     this.sockets.SetConnectionPollGroup(status.Conn, this.pollGroup);
                     var connection = new GnsConnection(status.Conn);
                     this.connections[status.Conn.Handle] = connection;
-                    this.ClientConnected?.Invoke(connection);
                 }
 
+                break;
+
+            case ESteamNetworkingConnectionState.Connected:
+                if (!this.SecurityPolicy.Accept(status.Info, out string? securityReason))
+                    this.sockets.CloseConnection(status.Conn, 1, securityReason, false);
+                else if (this.connections.TryGetValue(status.Conn.Handle, out GnsConnection? connected))
+                    this.ClientConnected?.Invoke(connected);
                 break;
 
             case ESteamNetworkingConnectionState.ClosedByPeer:

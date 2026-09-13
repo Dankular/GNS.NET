@@ -29,4 +29,10 @@ public sealed class GnsRuntimeOptions
     /// Detail level for <see cref="DebugOutput"/>. Ignored if <see cref="DebugOutput"/> is null.
     /// </summary>
     public ESteamNetworkingSocketsDebugOutputType DebugOutputLevel { get; init; } = ESteamNetworkingSocketsDebugOutputType.Warning;
+
+    /// <summary>Optional native GNS impairment values for development builds only.</summary>
+    public GnsImpairmentOptions? Impairment { get; init; }
+    public GnsP2POptions? P2P { get; init; }
+
+    public bool RequireNativeAuthentication { get; init; } = true;
 }

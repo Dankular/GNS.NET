@@ -39,6 +39,8 @@ public sealed class PacketWriter
 
     public void WriteUInt32(uint value) => BinaryPrimitives.WriteUInt32BigEndian(this.Reserve(4), value);
 
+    public void WriteUInt64(ulong value) => BinaryPrimitives.WriteUInt64BigEndian(this.Reserve(8), value);
+
     public void WriteInt32(int value) => BinaryPrimitives.WriteInt32BigEndian(this.Reserve(4), value);
 
     public void WriteFloat(float value) => BinaryPrimitives.WriteSingleBigEndian(this.Reserve(4), value);

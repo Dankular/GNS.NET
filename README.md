@@ -4,10 +4,12 @@ A reusable authoritative-server networking layer for C# game projects, built on
 [GnsSharp](https://github.com/nalchi-net/GnsSharp)'s binding of Valve's
 [GameNetworkingSockets](https://github.com/ValveSoftware/GameNetworkingSockets) (GNS).
 
-This repository started as a single-purpose proof of concept (one entity, one client, scripted
-input - see [`samples/Poc`](samples/Poc)). The code here generalizes that into a small library,
-[`GnsNet`](src/GnsNet), meant to be the starting point for future game projects rather than
-something each new project re-derives from scratch.
+This repository started as a single-purpose proof of concept and now provides a reusable framework
+layer in [`GnsNet`](src/GnsNet): MemoryPack framing, authoritative simulation helpers, prediction /
+reconciliation, snapshot interpolation, resumable sessions, authenticated admission, validation,
+AOI/delta/priority snapshot delivery, diagnostics, replay, scaling, and backend/shard coordination.
+High-level frames carry both protocol and MemoryPack schema revisions and reject unsupported revisions
+before deserialization.
 
 ## What's in `GnsNet`
 
@@ -20,12 +22,53 @@ something each new project re-derives from scratch.
 | `TickLoop` | Drives a fixed-interval loop (a server simulation tick, or a client's periodic input send). |
 | `TickSequence` | Wraparound-safe "is this tick newer than that one" comparison for a `uint` tick counter (RFC 1982 serial number arithmetic). |
 | `NativeLibraryLoader` | Resolves and loads the native `GameNetworkingSockets` shared library (explicit path, `GNSNET_NATIVE_LIBRARY_PATH` env var, or platform default next to the executable). |
+| `GnsServerHost` / `GnsClientHost` | Integrated framework hosts for authentication, heartbeats, reconnect/session grace, typed routing, batching, metrics, replay, and channel policy. |
+| `SnapshotPipeline` | Automatic AOI culling, acknowledged delta baselines, relevance priority, batching, and state/event channels. |
+| `ReliableBackendBus` / `TcpBackendMessageBus` | Authenticated, ordered, retrying server-to-server transport. |
+| `NetworkDebugOverlay` | Renderer-neutral per-connection RTT, loss, packet, and byte diagnostics for in-game overlays. |
 
-`GnsNet` is intentionally thin - it does not impose a serialization format, an entity model, or
-a reconciliation/prediction scheme on you. It exists to remove the boilerplate around GNS
-itself (native lib loading, connection lifecycle, poll groups, message pump/release) that's the
-same in every project, so a new game's networking code can start from "define your messages and
-your tick loop" rather than from GNS's raw C-ish API.
+The framework leaves game-specific state and physics to the application, but provides the transport
+policies and integration points around them. MemoryPack messages must be schema-defined with
+`[MemoryPackable]`; server input handlers registered through `GnsServerHost` always pass through
+the registered guards before application handlers run.
+
+`GnsServerHost` requires a `ConnectionAdmission` by default. Construct it with a
+`ConnectTokenService` backed by a web backend or matchmaker-issued short-lived token; set
+`RequireApplicationAdmission = false` only for an intentionally open development server.
+
+## Opinionated framework API
+
+Applications can use `GnsAuthoritativeServer<TSessionId, TState, TInput>` and
+`GnsPredictedClient<TInput, TState>` when they want the framework to compose the common systems:
+
+```csharp
+var server = new GnsAuthoritativeServer<string, WorldState, PlayerInput>(
+    gnsServer, initialWorld,
+    (state, player, input) => state.Apply(player, input),
+    new ServerInputGuard<string, PlayerInput>((player, input) => input.IsValid),
+    sessionGracePeriod: TimeSpan.FromSeconds(30));
+
+server.PollAndAdvance();
+server.BroadcastState();
+```
+
+The client facade predicts local input immediately, reconciles authoritative MemoryPack states,
+and provides delayed snapshot interpolation for rendering:
+
+```csharp
+var client = new GnsPredictedClient<PlayerInput, WorldState>(
+    clientHost, initialWorld,
+    (state, input) => state.ApplyLocal(input),
+    (from, to, amount) => WorldState.Lerp(from, to, amount));
+
+client.SubmitInput(localTick, input);
+client.Poll();
+if (client.TryRender(serverTick, out var renderState)) Draw(renderState);
+```
+
+`NetworkFrameworkOptions` controls application opcodes, snapshot buffering, and interpolation
+delay. Lower-level hosts and pipelines remain available for custom AOI, delta, priority, replay,
+backend, sharding, and transport policies.
 
 ## Prerequisites
 
@@ -53,6 +96,14 @@ dotnet build -p:GnsNetBackend=Win32
 The Steamworks SDK backend isn't wired up here; adding it would mean branching the runtime
 init/shutdown path (`SteamAPI.InitEx`/`Shutdown` instead of `GameNetworkingSockets.Init`/`Kill`)
 on top of what `GnsRuntime` does today.
+
+The selected open-source backend exposes native authenticated transport/certificate state, which
+this framework enforces. Steam `BeginAuthSession` ticket callbacks are a Steamworks API flow and
+are not available through this backend. The framework includes `ShardSupervisor` for detecting and
+restarting dead local shard processes; deployment systems may still provide an outer supervisor for
+host-machine failures. The managed P2P/ICE entry points are present, but the pinned GnsSharp/GNS
+native commit documents broken P2P support; use an updated native GNS build to validate traversal.
+See [`TODO.md`](TODO.md).
 
 ## Using `GnsNet` in a new game project
 
@@ -96,8 +147,9 @@ dotnet build
 dotnet test
 ```
 
-`dotnet test` only exercises the parts of `GnsNet` that don't need the native GNS library
-(`PacketWriter`/`PacketReader`/`TickSequence`). Running `samples/Poc` end-to-end additionally
+The test suite exercises serialization, framing, prediction/interpolation, validation, session
+resumption, auth, metrics, replay persistence, adaptive load shedding, TCP backend messaging, and
+shard migration without requiring a native GNS server. Running `samples/Poc` end-to-end additionally
 needs the native library described above.
 
 ## License

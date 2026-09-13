@@ -3,6 +3,14 @@
   <PropertyGroup>
     <RootNamespace>GnsNet</RootNamespace>
     <AssemblyName>GnsNet</AssemblyName>
+    <PackageId>GnsNet</PackageId>
+    <Version>0.1.0-alpha.1</Version>
+    <Authors>Dankular</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>gamedev;networking;authoritative-server;gamenetworkingsockets;memorypack</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <RepositoryUrl>https://github.com/Dankular/GNS.NET</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Doc comments are encouraged but not mandatory on every member; only warn where one is
@@ -38,6 +46,11 @@
   </ItemGroup>
   <ItemGroup Condition="'$(GnsNetBackend)' == 'Win32'">
     <PackageReference Include="GnsSharp.Gns.Win32" Version="0.1.0-alpha.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MemoryPack" Version="1.21.4" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

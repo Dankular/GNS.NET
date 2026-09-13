@@ -1,16 +1,33 @@
 namespace GnsNet.Poc;
 
+using MemoryPack;
+
 /// <summary>
-/// The POC's hand-packed wire protocol. Intentionally minimal - see samples/Poc/README.md.
+/// The POC's shared schema and message identifiers.
 /// </summary>
 public static class Protocol
 {
     /// <summary>Server tick rate. Both ends pace themselves off this.</summary>
     public static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(50); // 20 Hz
 
-    /// <summary>Client -&gt; Server: [Opcode.ClientInput][sbyte dx][sbyte dy].</summary>
+    /// <summary>Client -&gt; Server: MemoryPack-serialized <see cref="ClientInput"/>.</summary>
     public const byte OpcodeClientInput = 0x01;
 
-    /// <summary>Server -&gt; Client: [Opcode.ServerState][uint32 tick][float x][float y].</summary>
+    /// <summary>Server -&gt; Client: MemoryPack-serialized <see cref="ServerState"/>.</summary>
     public const byte OpcodeServerState = 0x02;
+}
+
+[MemoryPackable]
+public partial class ClientInput
+{
+    public sbyte Dx { get; set; }
+    public sbyte Dy { get; set; }
+}
+
+[MemoryPackable]
+public partial class ServerState
+{
+    public uint Tick { get; set; }
+    public float X { get; set; }
+    public float Y { get; set; }
 }

@@ -52,4 +52,22 @@ public sealed class TickLoop
             }
         }
     }
+
+    public async Task RunAdaptiveAsync(Action<uint, TimeSpan> onTick, Func<TimeSpan> intervalProvider, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(intervalProvider);
+        uint tick = 0; long lastTimestamp = Stopwatch.GetTimestamp();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            long now = Stopwatch.GetTimestamp(); onTick(tick, Stopwatch.GetElapsedTime(lastTimestamp, now)); lastTimestamp = now; unchecked { tick++; }
+            try { await Task.Delay(intervalProvider(), cancellationToken).ConfigureAwait(false); } catch (OperationCanceledException) { break; }
+        }
+    }
+
+    /// <summary>Runs the loop while applying load-based tick reduction with recovery hysteresis.</summary>
+    public Task RunAdaptiveAsync(Action<uint, TimeSpan> onTick, AdaptiveTickController controller, LoadSheddingPolicy policy, Func<ServerLoad> loadProvider, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(controller); ArgumentNullException.ThrowIfNull(policy); ArgumentNullException.ThrowIfNull(loadProvider);
+        return this.RunAdaptiveAsync(onTick, () => controller.Update(loadProvider(), policy), cancellationToken);
+    }
 }
