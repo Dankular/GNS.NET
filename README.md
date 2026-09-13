@@ -140,6 +140,39 @@ server-side, then maps the returned `UserInfo.PlayFabId` into a GNS.NET admissio
 also supports `--playfab`; see [`samples/Poc/README.md`](samples/Poc/README.md#run). Keep the title
 secret in `.env` or a secret manager—never in a client build, command history, or Git.
 
+#### PlayFab account, server, and Lobby flow
+
+`PlayFabRestClient` provides the account and Lobby REST flow without requiring the PlayFab SDK:
+
+```csharp
+var playFab = new PlayFabRestClient(titleId);
+
+// Client account flow. Keep returned credentials in memory.
+PlayFabAccountSession account = await playFab.RegisterAsync(
+    "player@example.com", password, "player-name");
+// Existing accounts use:
+// PlayFabAccountSession account = await playFab.LoginAsync("player-name", password);
+
+PlayFabEntitySession playerEntity = account.EntitySession
+    ?? await playFab.GetEntityTokenAsync(account.SessionTicket);
+
+// Register a dedicated server once with a stable 32-100 character ID.
+PlayFabEntitySession serverEntity = await playFab.RegisterServerAsync(
+    serverInstanceId, titleSecretKey);
+
+PlayFabLobby lobby = await playFab.CreateServerLobbyAsync(serverEntity,
+    new PlayFabLobbyOptions { MaxPlayers = 16, AccessPolicy = "Public" });
+PlayFabLobby joined = await playFab.JoinLobbyAsync(
+    playerEntity, lobby.ConnectionString!);
+```
+
+`RegisterServerAsync` uses the title secret only on the server to obtain a title entity token and
+register a `game_server` entity. Lobby calls use `X-EntityToken`; clients join with
+`JoinLobbyAsync`, while a game server can attach to a client-owned lobby with
+`JoinLobbyAsServerAsync`. PlayFab requires an authenticated entity before Lobby operations and
+supports both client-owned and server-owned lobbies. See [Create Lobby](https://learn.microsoft.com/en-us/rest/api/playfab/multiplayer/lobby/create-lobby)
+and [Join Lobby](https://learn.microsoft.com/en-us/rest/api/playfab/multiplayer/lobby/join-lobby).
+
 For a local two-process smoke test where Steamworks/native auth-ticket provisioning is unavailable,
 the POC supports an explicit development-only `--insecure` flag:
 
