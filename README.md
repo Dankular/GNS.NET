@@ -70,6 +70,164 @@ if (client.TryRender(serverTick, out var renderState)) Draw(renderState);
 delay. Lower-level hosts and pipelines remain available for custom AOI, delta, priority, replay,
 backend, sharding, and transport policies.
 
+### Define wire messages with MemoryPack
+
+Every application message should be schema-defined. `NetFrame` adds the protocol/schema version,
+tick, and opcode around the MemoryPack payload:
+
+```csharp
+using MemoryPack;
+
+[MemoryPackable]
+public partial class PlayerInput
+{
+    public float MoveX { get; set; }
+    public float MoveY { get; set; }
+}
+
+[MemoryPackable]
+public partial class WorldState
+{
+    public int ServerTick { get; set; }
+    public Dictionary<string, Vector2> Players { get; set; } = new();
+}
+```
+
+### Authenticated admission and session resumption
+
+Issue the short-lived token from a web backend or matchmaker. The server host consumes it from the
+reserved handshake frame before dispatching gameplay frames; reconnecting with the same session id
+can resume the grace-period slot:
+
+```csharp
+var tokenService = new ConnectTokenService(RandomNumberGenerator.GetBytes(32));
+string token = tokenService.Issue("player-42", TimeSpan.FromMinutes(2));
+var admission = new ConnectionAdmission(tokenService);
+var host = new GnsServerHost<string>(server, TimeSpan.FromSeconds(30), admission);
+
+// The client sends the token in its handshake automatically when supplied to GnsClientHost.
+var reconnecting = new ReconnectableClient(() => GnsClient.Connect("127.0.0.1:27015"));
+var clientHost = new GnsClientHost(reconnecting, token);
+clientHost.Start();
+```
+
+Use `GnsDisconnectKind.GracefulQuit` to remove state immediately. Transport loss and heartbeat
+timeouts detach the connection while preserving the session until the grace period expires.
+
+### Typed reliable and unreliable traffic
+
+Use unreliable state messages for frequently changing values and reliable event messages for data
+that must arrive exactly once at the application layer:
+
+```csharp
+const byte ChatOpcode = 10;
+const byte InputOpcode = 11;
+
+// Reliable and ordered by GNS: chat, inventory, match events.
+clientHost.Send(ChatOpcode, tick, new ChatMessage { Text = "ready" }, NetChannel.Event.SendType());
+
+// Unreliable state: a newer input/snapshot supersedes an older one.
+clientHost.Send(InputOpcode, tick, new PlayerInput { MoveX = 1 }, NetChannel.State.SendType());
+
+clientHost.Router.Register<ChatMessage>(ChatOpcode, (message, frame) => chat.Add(message.Text));
+```
+
+`NetBatch` combines multiple frames into one packet. `GnsServerHost.SendBatch` and
+`GnsClientHost.SendBatch` preserve the selected channel for the whole batch.
+
+### AOI, delta compression, priority, and batching
+
+For a custom snapshot policy, compose the lower-level pipeline once and drain it each server tick:
+
+```csharp
+var interest = new InterestManager<string, Entity>();
+interest.SetView("player-42", new InterestPoint(x: 0, y: 0, radius: 50));
+
+var delta = new DeltaCompressor<WorldState>(
+    (baseline, current) => WorldStateDelta.Create(baseline, current),
+    (baseline, change) => WorldStateDelta.Apply(baseline, change));
+var snapshots = new SnapshotPipeline<string, Entity, WorldState>(
+    interest, delta, entity => (entity.X, entity.Y));
+
+snapshots.Queue("player-42", world.Entities, world.State,
+    entityOpcode: 20, snapshotOpcode: 21, tick, relevance: 1.0f);
+var batch = new NetBatch();
+foreach (var item in snapshots.Drain("player-42", maxFrames: 64)) batch.Add(item.Frame);
+if (batch.Count > 0) host.SendBatch(connection, batch, NetChannel.State.SendType());
+```
+
+Lower relevance values automatically reduce update frequency. `PrioritySendQueue` can be used when
+an application needs to mix event, nearby-state, and distant-state priorities in the same tick.
+
+### Prediction and interpolation without the facade
+
+The state helpers are also usable independently of a transport host:
+
+```csharp
+var prediction = new ClientPrediction<PlayerInput, WorldState>();
+prediction.Add(inputTick, input);
+WorldState corrected = prediction.Reconcile(
+    acknowledgedTick, serverState,
+    (state, pendingInput) => state.ApplyLocal(pendingInput));
+
+var buffer = new SnapshotBuffer<WorldState>(capacity: 32);
+buffer.Add(serverTick, corrected);
+if (buffer.TrySample(renderTick,
+    (from, to, amount) => WorldState.Lerp(from, to, amount), out var smoothState))
+    Draw(smoothState);
+```
+
+### Diagnostics, impairment, and replay
+
+Attach these services to a host during development to reproduce poor network conditions and capture
+desyncs. Heartbeat probes update RTT and loss metrics automatically:
+
+```csharp
+var recorder = new NetworkRecorder();
+var conditions = new NetworkConditionSimulator(
+    new NetworkConditions(TimeSpan.FromMilliseconds(80), TimeSpan.FromMilliseconds(20), 3), seed: 7);
+var diagnosticsHost = new GnsServerHost<string>(
+    server, TimeSpan.FromSeconds(30), admission)
+{
+    Conditions = conditions,
+    Recorder = recorder
+};
+
+// Render this string in an in-game debug overlay.
+string overlay = NetworkDebugOverlay.Format(
+    NetworkDebugOverlay.Snapshot("player-42", diagnosticsHost.Metrics));
+
+await recorder.SaveAsync("captures/desync.gnsr");
+var capture = await NetworkRecorder.LoadAsync("captures/desync.gnsr");
+await capture.ReplayTransportAsync(packet => ReplayToTestServer(packet));
+```
+
+### Backend messaging and sharding
+
+Keep matchmaker, persistence, and game processes off the player-facing socket. The TCP backend bus
+provides an authenticated process boundary; `ReliableBackendBus` adds retries and per-topic order:
+
+```csharp
+await using var backend = await TcpBackendMessageBus.ConnectAsync("backend.internal", 4100);
+await using var reliable = new ReliableBackendBus(backend, backendSecret);
+await reliable.PublishAsync(new BackendMessage(
+    "persistence", MemoryPackSerializer.Serialize(playerSave), DateTimeOffset.UtcNow));
+```
+
+Route matches/rooms to independent processes and coordinate lifecycle and migration through the
+sharding APIs:
+
+```csharp
+var directory = new ShardDirectory<string>();
+directory.Add("match-process-a");
+directory.Add("match-process-b");
+string shard = directory.Select("match-123");
+
+var lifecycle = new ShardLifecycle<string, string>(TimeSpan.FromMinutes(1));
+var coordinator = new ShardProcessCoordinator<string, string>(processController, lifecycle, transfer);
+await coordinator.MigrateAsync("player-42", shard);
+```
+
 ## Prerequisites
 
 - .NET 9 SDK
