@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>GnsNet</RootNamespace>
+    <AssemblyName>GnsNet</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Doc comments are encouraged but not mandatory on every member; only warn where one is
+         present but wrong (mismatched/missing <param>, broken <see>, etc). -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Description>Reusable authoritative-server networking wrapper around GnsSharp / Valve's GameNetworkingSockets, for use across multiple game projects.</Description>
+  </PropertyGroup>
+
+  <!--
+    GnsSharp ships one NuGet package per (backend x platform x bitness) combination, because the
+    native GameNetworkingSockets struct layout differs per platform/bitness, and the Steamworks SDK
+    vs. open-source GNS backends are not API-compatible at the native level. Exactly one of these
+    must be referenced by the final assembly - see https://github.com/nalchi-net/GnsSharp.
+
+    This wrapper targets the open-source (non-Steamworks) GNS backend, matching the original POC's
+    prerequisite of a self-built libGameNetworkingSockets. Pick the platform with the GnsNetBackend
+    MSBuild property, e.g.:
+
+      dotnet build -p:GnsNetBackend=Win64
+  -->
+  <PropertyGroup>
+    <GnsNetBackend Condition="'$(GnsNetBackend)' == ''">Posix64</GnsNetBackend>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(GnsNetBackend)' == 'Posix64'">
+    <PackageReference Include="GnsSharp.Gns.Posix64" Version="0.1.0-alpha.14" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(GnsNetBackend)' == 'Posix32'">
+    <PackageReference Include="GnsSharp.Gns.Posix32" Version="0.1.0-alpha.14" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(GnsNetBackend)' == 'Win64'">
+    <PackageReference Include="GnsSharp.Gns.Win64" Version="0.1.0-alpha.14" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(GnsNetBackend)' == 'Win32'">
+    <PackageReference Include="GnsSharp.Gns.Win32" Version="0.1.0-alpha.14" />
+  </ItemGroup>
+
+</Project>

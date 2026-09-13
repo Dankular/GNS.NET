@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>GnsNet.Poc.Client</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/GnsNet/GnsNet.csproj" />
+    <ProjectReference Include="../Poc.Shared/Poc.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
