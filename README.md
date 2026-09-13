@@ -67,6 +67,49 @@ never treat an unverified client-supplied subject as an identity. This supports 
 Xbox/XSTS, Google Play Games, Apple Game Center, and any custom provider without adding their SDKs
 to the transport package.
 
+#### EOS Connect adapter
+
+`EosConnectIdentityVerifier` is the EOS-specific contract. The configured HTTPS service must use
+the EOS SDK/service to validate the Connect credential, then return the verified Product User ID
+and context. EOS Connect supports external credentials and produces Product User IDs for crossplay;
+the game should obtain the credential through EOS Connect, while the validation service owns EOS
+credentials and provider configuration. [Epic's EOS documentation](https://dev.epicgames.com/documentation/unreal-engine/online-subsystem-eos-plugin-in-unreal-engine)
+
+```csharp
+var eos = new EosConnectIdentityVerifier(
+    httpClient,
+    new Uri("https://auth.example.com/verify/eos-connect"),
+    new EosConnectValidationOptions
+    {
+        DeploymentId = environment.EosDeploymentId,
+        SandboxId = environment.EosSandboxId,
+        ClientId = environment.EosClientId,
+        Nonce = loginNonce
+    });
+
+string? ticket = await gateway.AuthenticateAsync(
+    eos, eosConnectCredential, TimeSpan.FromMinutes(2));
+```
+
+The verifier sends the credential and expected context to the service. The service response must be
+similar to:
+
+```json
+{
+  "valid": true,
+  "productUserId": "puid-example",
+  "deploymentId": "deployment-example",
+  "sandboxId": "sandbox-example",
+  "clientId": "client-example",
+  "nonce": "login-nonce",
+  "expiresAt": "2030-01-01T00:00:00Z"
+}
+```
+
+GNS.NET rejects the response when `valid` is false, the Product User ID is absent, any configured
+deployment/sandbox/client/nonce does not match, or `expiresAt` has passed. The EOS client secret
+and EOS SDK remain backend-only; they are never sent over the GNS transport.
+
 For a direct PlayFab integration, use `PlayFabSessionTicketVerifier`. It calls PlayFab's
 `https://<titleId>.playfabapi.com/Server/AuthenticateSessionTicket` endpoint with `X-SecretKey`
 server-side, then maps the returned `UserInfo.PlayFabId` into a GNS.NET admission ticket. The POC

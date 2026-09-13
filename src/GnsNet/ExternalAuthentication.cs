@@ -108,6 +108,54 @@ public sealed class XboxXstsIdentityVerifier(HttpClient client, Uri endpoint) : 
 public sealed class GooglePlayGamesIdentityVerifier(HttpClient client, Uri endpoint) : HttpIdentityVerifier("google-play-games", client, endpoint);
 public sealed class AppleGameCenterIdentityVerifier(HttpClient client, Uri endpoint) : HttpIdentityVerifier("apple-game-center", client, endpoint);
 
+/// <summary>Expected EOS identity context for a Connect credential validation request.</summary>
+public sealed class EosConnectValidationOptions
+{
+    public string? DeploymentId { get; init; }
+    public string? SandboxId { get; init; }
+    public string? ClientId { get; init; }
+    public string? Nonce { get; init; }
+}
+
+/// <summary>
+/// Validates an EOS Connect credential through an EOS-backed HTTPS service and enforces the
+/// product/deployment context before issuing a GNS.NET identity.
+/// </summary>
+/// <remarks>
+/// The service endpoint must use the EOS SDK or EOS service APIs to validate the credential. It
+/// receives <c>credential</c> and the expected context, and returns a JSON object containing
+/// <c>valid</c>, <c>productUserId</c>, <c>deploymentId</c>, <c>sandboxId</c>, <c>clientId</c>,
+/// <c>expiresAt</c>, and (when a nonce was supplied) <c>nonce</c>. This keeps EOS SDK licensing and
+/// native binaries out of GnsNet while preventing an untrusted subject from becoming an identity.
+/// </remarks>
+public sealed class EosConnectIdentityVerifier : IExternalIdentityVerifier
+{
+    private readonly HttpClient client;
+    private readonly Uri endpoint;
+    private readonly EosConnectValidationOptions expected;
+    public EosConnectIdentityVerifier(HttpClient client, Uri endpoint, EosConnectValidationOptions? expected = null)
+    {
+        this.client = client ?? throw new ArgumentNullException(nameof(client)); this.endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
+        if (this.endpoint.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("EOS validation endpoints must use HTTPS.", nameof(endpoint));
+        this.expected = expected ?? new EosConnectValidationOptions();
+    }
+    public async ValueTask<ExternalIdentity?> VerifyAsync(string credential, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credential)) return null;
+        using HttpResponseMessage response = await this.client.PostAsJsonAsync(this.endpoint, new { credential, expected = this.expected }, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode) return null;
+        using JsonDocument document = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellationToken).ConfigureAwait(false) ?? throw new InvalidDataException("EOS response was empty.");
+        JsonElement root = document.RootElement;
+        if (!root.TryGetProperty("valid", out JsonElement valid) || valid.ValueKind != JsonValueKind.True || !root.TryGetProperty("productUserId", out JsonElement productUserId) || string.IsNullOrWhiteSpace(productUserId.GetString())) return null;
+        if (!Matches(root, "deploymentId", this.expected.DeploymentId) || !Matches(root, "sandboxId", this.expected.SandboxId) || !Matches(root, "clientId", this.expected.ClientId) || !Matches(root, "nonce", this.expected.Nonce)) return null;
+        if (!root.TryGetProperty("expiresAt", out JsonElement expiry) || !DateTimeOffset.TryParse(expiry.GetString(), out DateTimeOffset expiresAt) || expiresAt <= DateTimeOffset.UtcNow) return null;
+        var claims = new Dictionary<string, string>(StringComparer.Ordinal) { ["product_user_id"] = productUserId.GetString()!, ["expires_at"] = expiresAt.ToString("O") };
+        foreach (string name in new[] { "deploymentId", "sandboxId", "clientId", "nonce" }) if (root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String) claims[name] = value.GetString()!;
+        return new ExternalIdentity("eos-connect", productUserId.GetString()!, claims);
+    }
+    private static bool Matches(JsonElement root, string name, string? expected) => expected is null || root.TryGetProperty(name, out JsonElement actual) && actual.GetString() == expected;
+}
+
 /// <summary>Validates a PlayFab client session ticket using the PlayFab Server API.</summary>
 /// <remarks>
 /// The title secret key stays server-side and is sent only as the X-SecretKey header. PlayFab

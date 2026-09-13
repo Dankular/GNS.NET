@@ -62,6 +62,22 @@ public sealed class ExternalAuthenticationTests
         Assert.Throws<ArgumentException>(() => new PlayFabIdentityVerifier(client, new Uri("http://localhost/verify")));
     }
 
+    [Fact]
+    public async Task EosConnectVerifier_EnforcesContextAndExpiry()
+    {
+        using var client = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"valid\":true,\"productUserId\":\"puid-42\",\"deploymentId\":\"deployment\",\"sandboxId\":\"sandbox\",\"clientId\":\"client\",\"nonce\":\"nonce-1\",\"expiresAt\":\"2099-01-01T00:00:00Z\"}", Encoding.UTF8, "application/json")
+        }));
+        var verifier = new EosConnectIdentityVerifier(client, new Uri("https://auth.example.com/eos"), new EosConnectValidationOptions
+        { DeploymentId = "deployment", SandboxId = "sandbox", ClientId = "client", Nonce = "nonce-1" });
+        ExternalIdentity? identity = await verifier.VerifyAsync("eos-credential");
+        Assert.Equal("eos-connect", identity?.Provider); Assert.Equal("puid-42", identity?.Subject);
+
+        var wrongContext = new EosConnectIdentityVerifier(client, new Uri("https://auth.example.com/eos"), new EosConnectValidationOptions { DeploymentId = "other" });
+        Assert.Null(await wrongContext.VerifyAsync("eos-credential"));
+    }
+
     private sealed class FixedVerifier : IExternalIdentityVerifier
     {
         public ValueTask<ExternalIdentity?> VerifyAsync(string credential, CancellationToken cancellationToken = default)
