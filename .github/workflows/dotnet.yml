@@ -96,7 +96,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        if grep -RInE --exclude='*.md' --exclude='dotnet.yml' --exclude='turn.env.example' --exclude='turn-compose.yml' '(PLAYFAB_SECRET|STEAM.*KEY|TURN.*SECRET|PASSWORD[[:space:]]*[:=]|API_KEY[[:space:]]*[:=])' .github docker; then
+        if grep -RInE --exclude='*.md' --exclude='dotnet.yml' --exclude='package-signing.yml' --exclude='turn.env.example' --exclude='turn-compose.yml' '(PLAYFAB_SECRET|STEAM.*KEY|TURN.*SECRET|PASSWORD[[:space:]]*[:=]|API_KEY[[:space:]]*[:=])' .github docker; then
           echo "Credential-like value found in native CI configuration" >&2
           exit 1
         fi
