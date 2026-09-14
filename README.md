@@ -179,11 +179,11 @@ production deployment feature.
 | Replay capture, persistence, redaction, deterministic playback, and regression fingerprints | Implemented and CI-verified | Full replay/load orchestration across every connection, room, payload, impairment, and reconnect-storm dimension remains open. |
 | Telemetry meters, Grafana dashboard, renderer-neutral player overlay, and filtered AOI lifecycle scheduling | Implemented and tested | Game-specific observability and gameplay policy remain application work. |
 | Native certificate-aware transport policy and coordinator certificate installation | Implemented and tested | Authenticated native CI executes only when a valid coordinator-issued certificate is provisioned. |
-| Steamworks `BeginAuthSession` ticket callbacks | Not available in the selected backend | The open-source GnsSharp binding does not expose Steamworks ticket callbacks; this requires the Steamworks backend/runtime. |
+| Steam `BeginAuthSession` ticket callback lifecycle | Callback-owning manager implemented and unit-tested | End-to-end Steam client/game-server validation still requires the Steamworks SDK runtime, which this package deliberately does not initialize. |
 | Migration validation and package signing | Implemented as policy/capability tooling | Coordinated data conversion and trusted package certificate provisioning are operational release responsibilities. |
 
 Still-open external or integration work includes: real NAT traversal with two external peers;
-Steamworks `BeginAuthSession` callbacks; authenticated native client/server CI with a provisioned
+Steamworks runtime/client validation for `BeginAuthSession`; authenticated native client/server CI with a provisioned
 real certificate; LAN,
 IPv4/IPv6, symmetric-NAT, relay, and hostile-network matrices; broader scene/team/owner AOI
 lifecycle tests; full gameplay-level lag compensation; broader property-based fuzzing; native
@@ -683,8 +683,11 @@ init/shutdown path (`SteamAPI.InitEx`/`Shutdown` instead of `GameNetworkingSocke
 on top of what `GnsRuntime` does today.
 
 The selected open-source backend exposes native authenticated transport/certificate state, which
-this framework enforces. Steam `BeginAuthSession` ticket callbacks are a Steamworks API flow and
-are not available through this backend. The framework includes `ShardSupervisor` for detecting and
+this framework enforces. `SteamAuthSessionManager` owns the `BeginAuthSession` call, retains the
+`ValidateAuthTicketResponse` callback, and records accepted/rejected results when an `ISteamUser`
+runtime is available. The selected `GnsNet` build still initializes the open-source GNS backend,
+not the Steamworks SDK runtime, so the Steam client/game-server path remains an external validation.
+The framework includes `ShardSupervisor` for detecting and
 restarting dead local shard processes; deployment systems may still provide an outer supervisor for
 host-machine failures. The managed P2P/ICE entry points and native TURN credential configuration
 are present; use two external peers and a deployed relay to validate actual traversal.
@@ -715,10 +718,10 @@ join claim: the GS control plane still issues a short-lived signed claim contain
 allocation, player, build, and expiry, and `ConnectionAdmission` validates that claim after the
 transport connection is established.
 
-This repository's selected open-source backend does not expose Steamworks `BeginAuthSession` or
-Steam ticket callbacks. `NativeAuthentication.Capabilities.SteamAuthTickets` therefore remains
-`false`; enabling that flow requires the Steamworks GnsSharp backend and Steamworks runtime, which
-are not part of this build.
+`NativeAuthentication.Capabilities.SteamAuthTickets` remains `false` for the selected open-source
+GNS authentication capability. The separate `SteamAuthSessionManager` is the callback integration
+surface, but it requires the Steamworks GnsSharp backend and Steamworks runtime for an end-to-end
+ticket validation.
 
 For a reproducible external native runtime, use the checked-in Docker harness described in
 [`docs/native-runtime-container.md`](docs/native-runtime-container.md). It builds GNS and runs the
@@ -842,4 +845,4 @@ while public two-peer matrix runs remain separate external validation.
 
 MIT (see [LICENSE](LICENSE)). `GnsNet` depends on GnsSharp (MIT) and, transitively at runtime,
 on the native GameNetworkingSockets library (BSD-3-Clause). This repository selects the open-source
-GNS backend; Steamworks SDK integration and `BeginAuthSession` ticket callbacks are not included.
+GNS backend; Steamworks SDK runtime initialization and end-to-end ticket validation are not included.

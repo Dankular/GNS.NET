@@ -316,6 +316,25 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void SteamAuthSessionState_ConsumesValidationCallbacksAndTracksOwnership()
+    {
+        var state = new SteamAuthSessionState();
+        SteamAuthSessionValidation? received = null;
+        state.ValidationReceived += validation => received = validation;
+        var response = new ValidateAuthTicketResponse_t
+        {
+            SteamID = new CSteamID(42),
+            AuthSessionResponse = EAuthSessionResponse.OK,
+            OwnerSteamID = new CSteamID(99)
+        };
+
+        SteamAuthSessionValidation result = state.Apply(in response);
+        Assert.True(result.Accepted); Assert.True(result.IsOwnerDifferent); Assert.Equal(result, received);
+        Assert.True(state.TryGet(new CSteamID(42), out SteamAuthSessionValidation stored)); Assert.Equal(result, stored);
+        Assert.True(state.Remove(new CSteamID(42))); Assert.False(state.TryGet(new CSteamID(42), out _));
+    }
+
+    [Fact]
     public async Task HeartbeatTracker_IsSafeAcrossProbeAndAckThreads()
     {
         var tracker = new HeartbeatTracker(); var metrics = new ConnectionMetrics(); var probes = new System.Collections.Concurrent.ConcurrentBag<byte[]>();

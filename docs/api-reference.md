@@ -280,6 +280,18 @@ Allocates the next sequence number to put in an outbound probe.
 
 Records an observed sequence. Returns false for a duplicate or a bounded-window eviction.
 
+## `GnsNet.SteamAuthSessionManager.BeginAuthSession(System.ReadOnlySpan{System.Byte},GnsSharp.CSteamID)`
+
+System.Xml.XmlElement
+
+## `GnsNet.SteamAuthSessionManager.EndAuthSession(GnsSharp.CSteamID)`
+
+Ends the native auth session and removes its last callback result.
+
+## `GnsNet.SteamAuthSessionValidation.#ctor(GnsSharp.CSteamID,GnsSharp.EAuthSessionResponse,GnsSharp.CSteamID,System.Boolean)`
+
+Result delivered by Steam after an auth ticket has been validated.
+
 ## `GnsNet.TickLoop.RunAdaptiveAsync(System.Action{System.UInt32,System.TimeSpan},GnsNet.AdaptiveTickController,GnsNet.LoadSheddingPolicy,System.Func{GnsNet.ServerLoad},System.Threading.CancellationToken)`
 
 Runs the loop while applying load-based tick reduction with recovery hysteresis.
@@ -819,6 +831,18 @@ Mandatory per-client snapshot pipeline: AOI, delta baseline, priority, batching,
 ## `GnsNet.SpatialHashInterestManager`2`
 
 Spatial-hash AOI that avoids scanning every entity for every connection.
+
+## `GnsNet.SteamAuthSessionManager`
+
+System.Xml.XmlElement
+
+## `GnsNet.SteamAuthSessionState`
+
+Thread-safe state for Steam auth-session validation callbacks.
+
+## `GnsNet.SteamAuthSessionValidation`
+
+Result delivered by Steam after an auth ticket has been validated.
 
 ## `GnsNet.TcpBackendBusListener`
 

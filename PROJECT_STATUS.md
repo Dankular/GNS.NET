@@ -93,8 +93,8 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 ## Open limitations
 
 Real NAT traversal with two external peers; full public Coturn/VPS peer validation; coordinator-issued
-native certificate provisioning in CI; Steamworks `BeginAuthSession` callbacks unavailable through the
-selected open-source GnsSharp binding; authenticated native client/server CI with real certificates;
+native certificate provisioning in CI; Steamworks runtime/client validation for `BeginAuthSession`;
+authenticated native client/server CI with real certificates;
 full gameplay AOI/lag-compensation integration; broader fuzzing;
 complete replay/load orchestration; coordinated migration/data conversion; and trusted package
 certificate provisioning/signing remain open. Windows native loopback is CI-verified; only secure
