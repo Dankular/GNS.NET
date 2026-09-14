@@ -1,0 +1,27 @@
+name: Release smoke
+
+on:
+  workflow_dispatch:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+
+jobs:
+  package-consumer-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Run package and clean-consumer smoke test
+        shell: pwsh
+        run: ./scripts/release-smoke.ps1
+      - name: Upload release smoke package
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnsnet-release-smoke
+          path: artifacts/release-smoke/package/*.nupkg
+          if-no-files-found: error

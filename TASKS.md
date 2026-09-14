@@ -12,15 +12,17 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Verify ordering and duplicate suppression during replay.
   - [x] Automatically feed registered host/registry lifecycle events into the session journal.
   - [x] Send a complete initial object graph when the journal retention window is exceeded.
-- [~] M1.2 Complete command/RPC framework
+- [x] M1.2 Complete command/RPC framework
   - [x] Add typed MemoryPack command contracts.
   - [x] Add targeted client routing.
   - [x] Add request timeout and expiry handling.
   - [x] Add endpoint capability discovery.
-- [ ] M1.3 Room/scene lifecycle integration
+- [x] M1.3 Room/scene lifecycle integration
   - [x] Add scene transition records.
   - [x] Add late-join state transfer integration.
   - [x] Add full reconnect-during-spawn integration coverage.
+  - [x] Integrate room membership/readiness/scene events with authoritative object snapshots for late joiners.
+  - [x] Integrate typed RPC request/response envelopes with server and client hosts.
 
 ## M2 — Replication protocol
 
@@ -46,10 +48,11 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Store input/state/simulation metadata per tick.
   - [x] Rewind and resimulate a complete sample world.
   - [x] Apply correction smoothing to rendered state.
-- [ ] M3.2 Clock/tick policy integration
+- [x] M3.2 Clock/tick policy integration
   - [x] Apply measured drift to synchronization policy.
   - [x] Integrate bounded catch-up/slow-down into TickLoop.
   - [x] Expose prediction cost and misprediction magnitude.
+  - [x] Propagate clock samples, drift-adjusted pacing, and correction metrics through the predicted-client facade.
 - [x] M3.3 Impairment and long-rollback tests
   - [x] Test latency, jitter, packet loss, and duplicate snapshots.
   - [x] Test clock drift and long rollback windows.
@@ -94,4 +97,4 @@ means a supported partial implementation or an external validation dependency; `
   - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (CI now runs a high-cardinality smoke profile; a full matrix remains open).
 - [ ] M6.4 Release compatibility
   - [x] Define compatibility and migration policy.
-  - [ ] Add migration tooling, package signing, and release smoke tests.
+  - [~] Add migration tooling, package signing, and release smoke tests (package/consumer smoke is automated; migration conversion and signing remain open).

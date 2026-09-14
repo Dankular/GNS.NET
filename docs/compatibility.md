@@ -16,3 +16,15 @@ Recommended migration sequence:
 - Keep a rollback server artifact and native library matching the previous protocol.
 
 Every breaking release should add a protocol negotiation test and a release smoke test for the migration path.
+
+## Release smoke test
+
+Run the clean-consumer check from the repository root before publishing:
+
+```powershell
+./scripts/release-smoke.ps1
+```
+
+It restores the solution, packs `GnsNet`, verifies the README and managed assembly are in the `.nupkg`,
+then creates a fresh `net9.0` consumer and restores/builds it from the local package. The same check runs
+for `v*` tags and manual dispatch through `.github/workflows/release-smoke.yml`.
