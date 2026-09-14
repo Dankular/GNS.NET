@@ -33,3 +33,21 @@ GS (Nakama/Agones/control-plane) should authorize the match, call its signaling 
 and return the relay plan. It must not return `TURN_SHARED_SECRET`. GNS.NET only needs
 the resulting bearer-authenticated `P2PTraversalPlan`; PlayFab or another backend can
 implement the same publish/poll HTTP contract.
+
+## Verified VPS deployment
+
+The GS deployment owns the shared Coturn instance on the build VPS; GNS.NET must not start a
+second Coturn container on the same host or duplicate the shared secret. The deployed instance was
+validated on 2026-09-14 with Coturn 4.6.3 and the published UDP/TCP 3478 plus UDP relay range:
+
+1. The VPS Docker/Compose deployment was inspected and its Coturn container was running.
+2. An authenticated `turnutils_uclient` allocation probe ran with the deployment's secret kept
+   inside the host and received relay allocations in the configured public relay range.
+3. The probe exchanged 20/20 test packets with 0% loss and completed channel binds.
+4. The GNS.NET native container was built on the same VPS and its real native loopback harness
+   completed 2,000 echoed messages with 0% measured loss.
+
+This is deployment and single-host allocation evidence, not the missing two-external-peer proof.
+The VPS check does not close the NAT, symmetric-NAT, hostile-network, or public relayed-path matrix;
+those still require independently networked peers. The existing deployment is also configured
+without TURN TLS, so `turns:` endpoints require a separately provisioned certificate and listener.

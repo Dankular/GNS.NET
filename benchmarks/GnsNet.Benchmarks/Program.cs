@@ -10,6 +10,7 @@ Console.WriteLine($"Runtime: {Environment.Version} | CPU threads: {Environment.P
 if (options.Scenario is "all" or "serialize") Run("MemoryPack serialize + deserialize", options, BenchmarkSerialization);
 if (options.Scenario is "all" or "stress") Run("concurrent client serialization stress", options, BenchmarkConcurrentSerialization);
 if (options.Scenario is "transport") RunTransport(options);
+if (options.Scenario is "authenticated-transport") RunAuthenticatedTransport(options);
 if (options.Scenario is "p2p") await RunP2P(options);
 if (options.Scenario is "saturation") RunSaturation(options);
 if (options.Scenario is "playfab") await RunPlayFab(options);
@@ -113,6 +114,19 @@ static void RunTransport(BenchmarkOptions options)
     }
 }
 
+static void RunAuthenticatedTransport(BenchmarkOptions options)
+{
+    try
+    {
+        TransportResult result = BenchmarkTransport(options with { Insecure = true }, 1, authenticated: true);
+        Console.WriteLine($"GNS authenticated loopback transport: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} messages/s | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | connect p50={result.ConnectP50.TotalMilliseconds:N2} ms");
+    }
+    catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException or NotSupportedException or TimeoutException)
+    {
+        throw new InvalidOperationException($"GNS authenticated loopback transport is unavailable: {exception.Message}. A coordinator-issued certificate may be required; provide --native-certificate-path.", exception);
+    }
+}
+
 async Task RunP2P(BenchmarkOptions options)
 {
     if (!options.Insecure) throw new InvalidOperationException("The local P2P benchmark is intentionally unauthenticated; pass --insecure explicitly.");
@@ -205,12 +219,13 @@ static async Task RunPlayFab(BenchmarkOptions options)
     Console.WriteLine($"PlayFab end-to-end: registered account={account.PlayFabId}, server entity={server.Entity.Id}, lobby={joined.LobbyId}, elapsed={timer.Elapsed.TotalSeconds:N2}s");
 }
 
-static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst)
+static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst, bool authenticated = false)
 {
-    if (!options.Insecure) throw new InvalidOperationException("Native authentication is not configured for this loopback harness. Pass --insecure explicitly for development-only transport coverage.");
-    using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, RequireNativeAuthentication = false, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
+    if (!authenticated && !options.Insecure) throw new InvalidOperationException("Native authentication is not configured for this loopback harness. Pass --insecure explicitly for development-only transport coverage.");
+    byte[]? certificate = options.NativeCertificatePath is null ? null : File.ReadAllBytes(options.NativeCertificatePath);
+    using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, NativeCertificate = certificate, RequireNativeAuthentication = authenticated, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
     using GnsServer server = GnsServer.Listen("[::]:27991", Math.Max(64, options.Clients * 2));
-    server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
+    server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = authenticated, RequireEncrypted = authenticated };
     var clients = new List<GnsClient>(options.Clients);
     var connected = new CountdownEvent(options.Clients);
     var connectTimes = new List<TimeSpan>();
@@ -222,7 +237,7 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst)
         {
             Stopwatch started = Stopwatch.StartNew();
             GnsClient client = GnsClient.Connect(options.Address, Math.Max(64, options.Iterations));
-            client.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
+            client.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = authenticated, RequireEncrypted = authenticated };
             client.Connected += () => { lock (sync) connectTimes.Add(started.Elapsed); connected.Signal(); };
             client.Disconnected += (reason, debug) => Console.Error.WriteLine($"[GNS client disconnect] {reason}: {debug}");
             clients.Add(client);
@@ -370,16 +385,16 @@ readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Ela
 readonly record struct MatrixProfile(int Clients, int Entities, int PayloadBytes, double LossPercent, bool Reconnect);
 readonly record struct MatrixProfileResult(MatrixProfile Profile, int Frames, int CapturedPackets, int DeliveredPackets, int ReplayedLifecycleRecords);
 
-sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, string Address, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
+sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, string Address, string? NativeCertificatePath, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
         string scenario = Value(args, "--scenario") ?? "all";
         int clients = Number(args, "--clients", 16), entities = Number(args, "--entities", 1_000), iterations = Number(args, "--iterations", 10_000), payload = Number(args, "--payload-bytes", 128);
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
-        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "p2p" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, p2p, saturation, playfab, or matrix.");
+        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "authenticated-transport" or "p2p" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, authenticated-transport, p2p, saturation, playfab, or matrix.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
-        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), Value(args, "--address") ?? "127.0.0.1:27991", args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
+        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), Value(args, "--address") ?? "127.0.0.1:27991", Value(args, "--native-certificate-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
     }
     private static int Number(string[] args, string name, int fallback) => int.TryParse(Value(args, name), out int value) ? value : fallback;
     private static string? Value(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }

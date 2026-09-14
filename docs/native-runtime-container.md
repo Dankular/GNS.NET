@@ -32,7 +32,8 @@ job downloads both artifacts and runs the recorded SHA-256 checks, so a successf
 that the artifact received by the downstream job is the exact artifact produced by its platform job.
 
 Manual runs can pin the GameNetworkingSockets source with the `gns_ref` workflow input. Ordinary
-push and pull-request runs use `master`; production consumers should use a reviewed commit or tag.
+push, pull-request, and scheduled runs use the reviewed commit pinned in `.github/workflows/dotnet.yml`;
+production consumers should still review and promote native revisions deliberately.
 This validates packaging and runtime artifact identity, but it does not claim Windows execution on
 Linux or native NAT/TURN traversal. Those require platform runners and public-network peers.
 
@@ -40,5 +41,7 @@ The native loopback benchmark also requires `--insecure` explicitly. CI verifies
 switch fails, then runs the managed connection-admission and external-authentication contract tests
 and publishes `native-auth-capability.json`. This is the safest in-repository authentication coverage:
 it proves that insecure mode cannot be accidental and that application admission/auth contracts pass
-without embedding credentials. It does not validate Steamworks tickets, native GNS certificates, or
-real client/server authentication over a public network.
+without embedding credentials. When the protected `GNS_NATIVE_CERTIFICATE_B64` secret is configured,
+the `native-authenticated-linux` job additionally materializes it only for the job and runs the real
+authenticated/encrypted native client/server probe. Without that secret, native certificate coverage
+remains unprovisioned. Neither path validates Steamworks tickets or public-network authentication.

@@ -171,6 +171,60 @@ jobs:
           native/build-linux/gns-artifact.sha256
         if-no-files-found: error
 
+  native-authenticated-linux:
+    needs: native-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v4
+    - name: Detect protected certificate
+      id: certificate
+      shell: bash
+      env:
+        GNS_NATIVE_CERTIFICATE_B64: ${{ secrets.GNS_NATIVE_CERTIFICATE_B64 }}
+      run: |
+        if [[ -n "$GNS_NATIVE_CERTIFICATE_B64" ]]; then
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Download Linux native artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gamenetworkingsockets-linux-x64
+        path: native-artifacts/linux
+    - name: Build managed runtime
+      run: dotnet build GnsNet.sln -c Release
+    - name: Materialize protected native certificate
+      if: steps.certificate.outputs.configured == 'true'
+      shell: bash
+      env:
+        GNS_NATIVE_CERTIFICATE_B64: ${{ secrets.GNS_NATIVE_CERTIFICATE_B64 }}
+      run: |
+        set -euo pipefail
+        umask 077
+        printf '%s' "$GNS_NATIVE_CERTIFICATE_B64" | base64 --decode > native-certificate.bin
+        test -s native-certificate.bin
+    - name: Run authenticated native client/server probe
+      if: steps.certificate.outputs.configured == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        artifact="$(find native-artifacts/linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
+        test -n "$artifact"
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario authenticated-transport --native-path "$artifact" --native-certificate-path "$GITHUB_WORKSPACE/native-certificate.bin" --clients 2 --iterations 100 --payload-bytes 64 --deterministic
+    - name: Record unprovisioned certificate capability
+      if: steps.certificate.outputs.configured != 'true'
+      run: echo "GNS_NATIVE_CERTIFICATE_B64 is not provisioned; authenticated native runtime coverage remains untested."
+    - name: Remove protected certificate
+      if: always()
+      shell: bash
+      run: shred -u native-certificate.bin 2>/dev/null || rm -f native-certificate.bin
+
   native-windows:
     runs-on: windows-2022
     timeout-minutes: 45

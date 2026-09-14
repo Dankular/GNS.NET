@@ -6,7 +6,7 @@
 dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario all --clients 32 --entities 5000 --iterations 2000
 ```
 
-Scenarios are `serialize`, `stress`, `batch`, `pipeline`, `prediction`, `replay`, `matrix`, `transport`, `p2p`, and `playfab`. `stress` runs concurrent client serialization with `--parallelism` worker limits, useful for finding allocation and contention problems. Adjust `--clients`, `--entities`, `--iterations`, `--payload-bytes`, and `--parallelism` to model a target workload. Use Release builds for comparisons and repeat runs on an otherwise idle machine.
+Scenarios are `serialize`, `stress`, `batch`, `pipeline`, `prediction`, `replay`, `matrix`, `transport`, `authenticated-transport`, `p2p`, and `playfab`. `stress` runs concurrent client serialization with `--parallelism` worker limits, useful for finding allocation and contention problems. Adjust `--clients`, `--entities`, `--iterations`, `--payload-bytes`, and `--parallelism` to model a target workload. Use Release builds for comparisons and repeat runs on an otherwise idle machine.
 
 The `playfab` scenario uses one persistent account from `.env`/environment credentials and performs a live adapter smoke test: login, obtain the Entity Session Token, register a game-server entity, create a server-owned Lobby, and join it as the client. It never creates an account during normal runs and never prints credentials. Set `PLAYFAB_TEST_EMAIL`, `PLAYFAB_TEST_USERNAME`, and `PLAYFAB_TEST_PASSWORD` once. To explicitly provision that account the first time, add `--register-test-account` for one run, then omit it afterward:
 
@@ -27,6 +27,19 @@ hosted native runtime jobs run both address families. This is dual-stack LAN cov
 relay, or public-network traversal test.
 
 Without a native GNS library the tool reports transport capacity as unavailable; application-layer scenarios remain runnable.
+
+The `authenticated-transport` scenario is the secure native loopback probe. It enables native
+authentication and encryption on both ends and fails if the native backend cannot initialize
+authentication or establish the connection. If the backend requires a coordinator-issued
+certificate, provide its secret blob from a protected file with `--native-certificate-path`:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario authenticated-transport --native-path C:\path\to\GameNetworkingSockets.dll --native-certificate-path C:\secrets\gns-certificate.bin --iterations 100
+```
+
+Never commit or print the certificate blob. Hosted CI runs this probe only when the protected
+`GNS_NATIVE_CERTIFICATE_B64` secret is provisioned; an unconfigured job is reported as a
+capability limitation rather than presented as authenticated coverage.
 
 The `p2p` scenario attempts a local `ListenP2P` socket, obtains the native identity, connects a
 second in-process peer with `ConnectP2P`, and records whether echo traffic succeeds. It is
