@@ -193,7 +193,7 @@ public sealed class PlayFabSessionTicketVerifier : IExternalIdentityVerifier
 /// <summary>Loads non-secret PlayFab settings from a dotenv file or process environment.</summary>
 public static class PlayFabEnvironment
 {
-    public static (string TitleId, string SecretKey, string? SessionTicket) Load(string path = ".env")
+    public static (string TitleId, string SecretKey, string? SessionTicket, string? TestUsername, string? TestPassword, string? TestEmail) Load(string path = ".env")
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (File.Exists(path)) foreach (string raw in File.ReadAllLines(path))
@@ -206,6 +206,7 @@ public static class PlayFabEnvironment
         string titleId = Read("PLAYFAB_TITLE_ID"); string secretKey = Read("PLAYFAB_SECRET_KEY"); string? ticket = Read("PLAYFAB_SESSION_TICKET");
         if (string.IsNullOrWhiteSpace(titleId)) throw new InvalidOperationException("PLAYFAB_TITLE_ID is not configured.");
         if (string.IsNullOrWhiteSpace(secretKey)) throw new InvalidOperationException("PLAYFAB_SECRET_KEY is not configured.");
-        return (titleId, secretKey, string.IsNullOrWhiteSpace(ticket) ? null : ticket);
+        string? testUsername = Read("PLAYFAB_TEST_USERNAME"); string? testPassword = Read("PLAYFAB_TEST_PASSWORD"); string? testEmail = Read("PLAYFAB_TEST_EMAIL");
+        return (titleId, secretKey, string.IsNullOrWhiteSpace(ticket) ? null : ticket, string.IsNullOrWhiteSpace(testUsername) ? null : testUsername, string.IsNullOrWhiteSpace(testPassword) ? null : testPassword, string.IsNullOrWhiteSpace(testEmail) ? null : testEmail);
     }
 }

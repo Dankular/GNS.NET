@@ -40,6 +40,19 @@ public sealed class PlayFabClientTests
         Assert.Equal("X-EntityToken", handler.Requests[1].Headers.First().Key); Assert.Equal("X-EntityToken", handler.Requests[2].Headers.First().Key);
     }
 
+    [Fact]
+    public async Task ServerRegistration_AcceptsNestedEntityTokenResponse()
+    {
+        var handler = new QueueHandler(
+            "{\"data\":{\"EntityToken\":\"title-entity\",\"Entity\":{\"Id\":\"title\",\"Type\":\"title\"}}}",
+            "{\"data\":{\"EntityToken\":{\"EntityToken\":\"server-entity\",\"Entity\":{\"Id\":\"server-1\",\"Type\":\"game_server\"}}}}");
+        var client = new PlayFabRestClient("ABCD1", new HttpClient(handler));
+        PlayFabEntitySession server = await client.RegisterServerAsync(new string('s', 32), "secret");
+        Assert.Equal("server-entity", server.EntityToken);
+        Assert.Equal("server-1", server.Entity.Id);
+        Assert.Equal("game_server", server.Entity.Type);
+    }
+
     private sealed class QueueHandler : HttpMessageHandler
     {
         private readonly string[] responses;

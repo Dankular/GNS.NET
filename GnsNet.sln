@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Poc.Client", "samples\Poc\P
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GnsNet.Tests", "tests\GnsNet.Tests\GnsNet.Tests.csproj", "{89F54C4B-2263-42D2-B691-F612BEBF48A7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GnsNet.Benchmarks", "benchmarks\GnsNet.Benchmarks\GnsNet.Benchmarks.csproj", "{C2A4DF5F-5D0D-4E3A-8A8A-BA6BD1C4B18D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -85,6 +87,10 @@ Global
 		{89F54C4B-2263-42D2-B691-F612BEBF48A7}.Release|x64.Build.0 = Release|Any CPU
 		{89F54C4B-2263-42D2-B691-F612BEBF48A7}.Release|x86.ActiveCfg = Release|Any CPU
 		{89F54C4B-2263-42D2-B691-F612BEBF48A7}.Release|x86.Build.0 = Release|Any CPU
+		{C2A4DF5F-5D0D-4E3A-8A8A-BA6BD1C4B18D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2A4DF5F-5D0D-4E3A-8A8A-BA6BD1C4B18D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2A4DF5F-5D0D-4E3A-8A8A-BA6BD1C4B18D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2A4DF5F-5D0D-4E3A-8A8A-BA6BD1C4B18D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -95,5 +101,6 @@ Global
 		{3604127D-6748-4258-BFFE-E8F1E4F15DA8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{79209FB1-C17E-4808-A9BE-F3613D5DFE1C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{89F54C4B-2263-42D2-B691-F612BEBF48A7} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{C2A4DF5F-5D0D-4E3A-8A8A-BA6BD1C4B18D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

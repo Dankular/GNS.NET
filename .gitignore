@@ -8,6 +8,7 @@ artifacts/
 !.env.example
 
 ## Native libraries you build yourself (see README) — not vendored in this repo
+/native/
 *.so
 *.so.*
 *.dll

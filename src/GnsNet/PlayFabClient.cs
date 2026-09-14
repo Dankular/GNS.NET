@@ -106,7 +106,11 @@ public sealed class PlayFabRestClient
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(this.baseUrl + path)) { Content = JsonContent.Create(body) };
         if (header is not null) request.Headers.Add(header.Value.Name, header.Value.Value);
         using HttpResponseMessage response = await this.client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode) throw new HttpRequestException($"PlayFab request '{path}' failed with HTTP {(int)response.StatusCode}.");
+        if (!response.IsSuccessStatusCode)
+        {
+            string detail = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new HttpRequestException($"PlayFab request '{path}' failed with HTTP {(int)response.StatusCode}: {detail}");
+        }
         return await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellationToken).ConfigureAwait(false) ?? throw new InvalidDataException("PlayFab response was empty.");
     }
     private static PlayFabAccountSession ParseAccount(JsonElement root)
@@ -117,7 +121,13 @@ public sealed class PlayFabRestClient
     }
     private static PlayFabEntitySession ParseEntitySession(JsonElement root)
     {
-        JsonElement data = root.TryGetProperty("data", out JsonElement nested) ? nested : root; string token = data.GetProperty("EntityToken").GetString() ?? throw new InvalidDataException("PlayFab response has no entity token."); JsonElement entity = data.GetProperty("Entity"); DateTimeOffset? expires = data.TryGetProperty("TokenExpiration", out JsonElement expiry) && DateTimeOffset.TryParse(expiry.GetString(), out DateTimeOffset parsed) ? parsed : null; return new PlayFabEntitySession(token, new PlayFabEntityKey(entity.GetProperty("Id").GetString() ?? "", entity.GetProperty("Type").GetString() ?? ""), expires);
+        JsonElement data = root.TryGetProperty("data", out JsonElement nested) ? nested : root;
+        JsonElement tokenResponse = data.GetProperty("EntityToken");
+        if (tokenResponse.ValueKind == JsonValueKind.Object) data = tokenResponse;
+        string token = data.GetProperty("EntityToken").GetString() ?? throw new InvalidDataException("PlayFab response has no entity token.");
+        JsonElement entity = data.GetProperty("Entity");
+        DateTimeOffset? expires = data.TryGetProperty("TokenExpiration", out JsonElement expiry) && expiry.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(expiry.GetString(), out DateTimeOffset parsed) ? parsed : null;
+        return new PlayFabEntitySession(token, new PlayFabEntityKey(entity.GetProperty("Id").GetString() ?? "", entity.GetProperty("Type").GetString() ?? ""), expires);
     }
     private static PlayFabLobby ParseLobby(JsonElement root)
     {
