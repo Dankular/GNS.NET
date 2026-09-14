@@ -10,6 +10,7 @@ Console.WriteLine($"Runtime: {Environment.Version} | CPU threads: {Environment.P
 if (options.Scenario is "all" or "serialize") Run("MemoryPack serialize + deserialize", options, BenchmarkSerialization);
 if (options.Scenario is "all" or "stress") Run("concurrent client serialization stress", options, BenchmarkConcurrentSerialization);
 if (options.Scenario is "transport") RunTransport(options);
+if (options.Scenario is "saturation") RunSaturation(options);
 if (options.Scenario is "playfab") await RunPlayFab(options);
 if (options.Scenario is "all" or "batch") Run("NetBatch encode + decode", options, BenchmarkBatch);
 if (options.Scenario is "all" or "pipeline") Run("AOI + delta + priority snapshot pipeline", options, BenchmarkPipeline);
@@ -32,7 +33,7 @@ static void RunTransport(BenchmarkOptions options)
 {
     try
     {
-        TransportResult result = BenchmarkTransport(options);
+        TransportResult result = BenchmarkTransport(options, 1);
         Console.WriteLine($"GNS loopback transport: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} messages/s | {result.Bytes / 1024d / 1024d:N2} MiB on wire | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | loss={result.Loss:P2} | connect p50={result.ConnectP50.TotalMilliseconds:N2} ms");
     }
     catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
@@ -40,6 +41,33 @@ static void RunTransport(BenchmarkOptions options)
         Console.WriteLine($"GNS loopback transport: unavailable ({exception.Message})");
         Console.WriteLine("Build or provide the native GameNetworkingSockets library, then pass --native-path <path>.");
     }
+}
+
+static void RunSaturation(BenchmarkOptions options)
+{
+    var points = new List<SaturationPoint>();
+    foreach (int burst in new[] { 1, 2, 4, 8, 16, 32 })
+    {
+        TransportResult result = BenchmarkTransport(options with { Iterations = Math.Min(options.Iterations, 500) }, burst);
+        long offered = (long)options.Clients * burst * Math.Max(1, options.PayloadBytes);
+        points.Add(new(burst, result.Messages, result.Messages / result.Elapsed.TotalSeconds, result.Loss, result.P50.TotalMilliseconds, result.P99.TotalMilliseconds, offered));
+        Console.WriteLine($"Saturation burst={burst}: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} msg/s | offered={offered / 1024d:N1} KiB/tick | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | loss={result.Loss:P2}");
+    }
+    if (options.JsonPath is not null)
+    {
+        string json = System.Text.Json.JsonSerializer.Serialize(new { generatedAt = DateTimeOffset.UtcNow, scenario = "saturation", clients = options.Clients, payloadBytes = options.PayloadBytes, points }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(options.JsonPath, json);
+        string graphPath = Path.ChangeExtension(options.JsonPath, ".html");
+        File.WriteAllText(graphPath, SaturationGraph(points));
+        Console.WriteLine($"Saturation JSON: {options.JsonPath}"); Console.WriteLine($"Saturation graph: {graphPath}");
+    }
+}
+
+static string SaturationGraph(IReadOnlyList<SaturationPoint> points)
+{
+    string rows = string.Join("", points.Select(p => $"<tr><td>{p.Burst}</td><td>{p.Echoed}</td><td>{p.MessagesPerSecond:0}</td><td>{p.LossPercent:P2}</td><td>{p.P50Milliseconds:0.00}</td><td>{p.P99Milliseconds:0.00}</td></tr>"));
+    string bars = string.Join("", points.Select((p, i) => $"<rect x=\"{50 + i * 90}\" y=\"{260 - Math.Min(220, p.MessagesPerSecond / Math.Max(1, points.Max(x => x.MessagesPerSecond)) * 220):0}\" width=\"55\" height=\"220\" fill=\"#3b82f6\"><title>burst {p.Burst}: {p.MessagesPerSecond:0} msg/s, loss {p.LossPercent:P2}</title></rect>"));
+    return $"<!doctype html><meta charset=utf-8><title>GNS.NET saturation</title><h1>GNS.NET saturation ramp</h1><svg viewBox=\"0 0 {Math.Max(160, points.Count * 90 + 50)} 300\" width=\"100%\" height=300><line x1=20 y1=260 x2=100% y2=260 stroke=black />{bars}</svg><table border=1><tr><th>Burst</th><th>Echoed</th><th>Msg/s</th><th>Loss</th><th>p50 ms</th><th>p99 ms</th></tr>{rows}</table>";
 }
 
 static async Task RunPlayFab(BenchmarkOptions options)
@@ -61,7 +89,7 @@ static async Task RunPlayFab(BenchmarkOptions options)
     Console.WriteLine($"PlayFab end-to-end: registered account={account.PlayFabId}, server entity={server.Entity.Id}, lobby={joined.LobbyId}, elapsed={timer.Elapsed.TotalSeconds:N2}s");
 }
 
-static TransportResult BenchmarkTransport(BenchmarkOptions options)
+static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst)
 {
     using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, RequireNativeAuthentication = false, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
     using GnsServer server = GnsServer.Listen("[::]:27991", Math.Max(64, options.Clients * 2));
@@ -93,13 +121,13 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options)
         for (int tick = 0; tick < options.Iterations; tick++)
         {
             long sentAt = Stopwatch.GetTimestamp();
-            foreach (GnsClient client in clients) { client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay); sent++; }
-            long iterationReceived = 0; Stopwatch pump = Stopwatch.StartNew();
-            while (iterationReceived < clients.Count && pump.Elapsed < TimeSpan.FromMilliseconds(100))
+            foreach (GnsClient client in clients) for (int message = 0; message < burst; message++) { client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay); sent++; }
+            long iterationReceived = 0; int expected = checked(clients.Count * burst); Stopwatch pump = Stopwatch.StartNew();
+            while (iterationReceived < expected && pump.Elapsed < TimeSpan.FromMilliseconds(100))
             {
                 foreach (ReceivedMessage message in server.Poll()) server.Send(message.Connection, message.Data, ESteamNetworkingSendType.UnreliableNoDelay);
                 foreach (GnsClient client in clients) iterationReceived += client.Poll().Count;
-                if (iterationReceived < clients.Count) Thread.Yield();
+                if (iterationReceived < expected) Thread.Yield();
             }
             received += iterationReceived;
             if (iterationReceived > 0) rtts.Add((Stopwatch.GetTimestamp() - sentAt) * 1000d / Stopwatch.Frequency);
@@ -229,7 +257,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         string scenario = Value(args, "--scenario") ?? "all";
         int clients = Number(args, "--clients", 16), entities = Number(args, "--entities", 1_000), iterations = Number(args, "--iterations", 10_000), payload = Number(args, "--payload-bytes", 128);
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
-        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, or playfab.");
+        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "saturation" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, saturation, or playfab.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
         return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), Value(args, "--json"));
     }
@@ -238,3 +266,4 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
 }
 
 readonly record struct TransportResult(long Messages, long Bytes, TimeSpan Elapsed, double Loss, TimeSpan P50, TimeSpan P99, TimeSpan ConnectP50);
+readonly record struct SaturationPoint(int Burst, long Echoed, double MessagesPerSecond, double LossPercent, double P50Milliseconds, double P99Milliseconds, long OfferedBytesPerTick);
