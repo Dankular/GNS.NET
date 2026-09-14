@@ -52,6 +52,7 @@ jobs:
       run: if [ ! -d native/GameNetworkingSockets/.git ]; then git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets; fi
     - name: Install native dependencies
       run: vcpkg install --triplet x64-linux
+      working-directory: native/GameNetworkingSockets
     - name: Configure native transport
       run: cmake -S native/GameNetworkingSockets -B native/build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
     - name: Build native transport
@@ -82,6 +83,7 @@ jobs:
     - name: Install native dependencies
       shell: pwsh
       run: vcpkg install --triplet x64-windows
+      working-directory: native/GameNetworkingSockets
     - name: Configure native transport
       shell: pwsh
       run: cmake -S native/GameNetworkingSockets -B native/build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
