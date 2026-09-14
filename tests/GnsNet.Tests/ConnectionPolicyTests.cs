@@ -160,6 +160,24 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void SessionRehydration_ReplaysReconnectDuringSpawnSequenceInOrder()
+    {
+        var buffer = new SessionRehydrationBuffer<string>(); var client = new NetworkObjectRegistry<string>();
+        var first = new NetworkObjectDescriptor(1, 3, "player", 10); var second = new NetworkObjectDescriptor(2, 4, "player", 11);
+        buffer.Record("player", new(NetworkObjectChangeKind.Spawned, first));
+        buffer.Record("player", new(NetworkObjectChangeKind.OwnershipTransferred, first with { OwnerId = "server" }, "player"));
+        buffer.Record("player", new(NetworkObjectChangeKind.Spawned, second));
+        buffer.Record("player", new(NetworkObjectChangeKind.Despawned, first, Reason: "replaced"));
+
+        Assert.Equal(4, buffer.Snapshot("player").Count);
+        Assert.Equal(4, buffer.Replay("player", client));
+        Assert.False(client.TryGet(first.ObjectId, out _));
+        Assert.True(client.TryGet(second.ObjectId, out NetworkObjectDescriptor restored));
+        Assert.Equal(second, restored);
+        Assert.Equal(4, buffer.Replay("player", client));
+    }
+
+    [Fact]
     public void SessionRehydration_ReportsRetentionOverflowForBaselineFallback()
     {
         var buffer = new SessionRehydrationBuffer<string>(2); var entity = new NetworkObjectDescriptor(1, 1, "a", 1);

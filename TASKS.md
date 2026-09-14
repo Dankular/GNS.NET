@@ -20,7 +20,7 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M1.3 Room/scene lifecycle integration
   - [x] Add scene transition records.
   - [x] Add late-join state transfer integration.
-  - [ ] Add full reconnect-during-spawn integration coverage.
+  - [x] Add full reconnect-during-spawn integration coverage.
 
 ## M2 — Replication protocol
 
