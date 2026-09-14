@@ -48,5 +48,8 @@ Package signing uses the SDK's standard NuGet signer and is opt-in:
 ```
 
 Without `-CertificatePath`, the command only reports whether the installed SDK supports signing and never
-modifies the package. `.github/workflows/package-signing.yml` runs this capability check without secrets;
-trusted production signing requires an operator-provided certificate on a protected runner.
+modifies the package. `.github/workflows/package-signing.yml` runs both a no-secret capability check and a
+protected `trusted-signing` path. Configure `NUGET_SIGNING_CERTIFICATE_B64` and
+`NUGET_SIGNING_CERTIFICATE_PASSWORD` as repository/environment secrets to materialize the PFX only for
+the job, sign the candidate, and run `dotnet nuget verify --all`. Without those secrets, trusted signing
+remains explicitly unprovisioned rather than being treated as passed.

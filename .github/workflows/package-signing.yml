@@ -25,3 +25,51 @@ jobs:
           name: gnsnet-package-signing-capability
           path: artifacts/
           if-no-files-found: error
+
+  trusted-signing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Detect protected signing certificate
+        id: certificate
+        shell: bash
+        env:
+          NUGET_SIGNING_CERTIFICATE_B64: ${{ secrets.NUGET_SIGNING_CERTIFICATE_B64 }}
+        run: |
+          if [[ -n "$NUGET_SIGNING_CERTIFICATE_B64" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Pack release candidate
+        run: dotnet pack src/GnsNet/GnsNet.csproj --configuration Release --output artifacts/package -p:GnsNetBackend=Posix64
+      - name: Materialize protected signing certificate
+        if: steps.certificate.outputs.configured == 'true'
+        shell: bash
+        env:
+          NUGET_SIGNING_CERTIFICATE_B64: ${{ secrets.NUGET_SIGNING_CERTIFICATE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$NUGET_SIGNING_CERTIFICATE_B64" | base64 --decode > artifacts/signing.pfx
+          test -s artifacts/signing.pfx
+      - name: Sign and verify release candidate
+        if: steps.certificate.outputs.configured == 'true'
+        shell: pwsh
+        env:
+          NUGET_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.NUGET_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          $package = (Get-ChildItem artifacts/package/GnsNet.*.nupkg | Select-Object -First 1).FullName
+          ./scripts/sign-package.ps1 -PackagePath $package -CertificatePath (Resolve-Path artifacts/signing.pfx).Path -CertificatePassword $env:NUGET_SIGNING_CERTIFICATE_PASSWORD
+          dotnet nuget verify --all $package
+      - name: Record unprovisioned trusted-signing capability
+        if: steps.certificate.outputs.configured != 'true'
+        run: echo "NUGET_SIGNING_CERTIFICATE_B64 is not provisioned; trusted package signing remains untested."
+      - name: Remove protected signing certificate
+        if: always()
+        shell: bash
+        run: shred -u artifacts/signing.pfx 2>/dev/null || rm -f artifacts/signing.pfx
