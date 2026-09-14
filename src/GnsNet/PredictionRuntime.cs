@@ -94,6 +94,7 @@ public sealed class DirtyFieldMask
     public bool IsSet(int field) { this.Check(field); return (this.words[field / 64] & (1UL << (field % 64))) != 0; }
     public void Clear() => Array.Clear(this.words);
     public ReadOnlySpan<ulong> Words => this.words;
+    public int FieldCount => this.fieldCount;
     private void Check(int field) { if ((uint)field >= this.fieldCount) throw new ArgumentOutOfRangeException(nameof(field)); }
 }
 

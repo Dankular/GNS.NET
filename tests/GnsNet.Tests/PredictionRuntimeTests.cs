@@ -16,6 +16,17 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void DirtyFieldMaskCodec_RoundTripsOnlyDirtyFieldsAndRejectsSchemaMismatch()
+    {
+        var mask = new DirtyFieldMask(70); mask.Set(1); mask.Set(65);
+        byte[] encoded = DirtyFieldMaskCodec.Encode(3, mask, field => [(byte)field, 7]);
+        var decoded = DirtyFieldMaskCodec.Decode(encoded, 3, 70);
+        Assert.True(decoded.Mask.IsSet(1)); Assert.True(decoded.Mask.IsSet(65)); Assert.False(decoded.Mask.IsSet(2));
+        Assert.Equal(new byte[] { 1, 7 }, decoded.Fields[1]); Assert.Equal(new byte[] { 65, 7 }, decoded.Fields[65]);
+        Assert.Throws<InvalidDataException>(() => DirtyFieldMaskCodec.Decode(encoded, 4, 70));
+    }
+
+    [Fact]
     public void Rollback_ReplaysOnlyNewerInputsWithinBoundedHistory()
     {
         var rollback = new RollbackBuffer<int, int>(); rollback.Record(1, 2, 2); rollback.Record(2, 3, 5); rollback.Record(3, 4, 9);
