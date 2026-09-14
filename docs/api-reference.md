@@ -176,6 +176,10 @@ Rewinds and tests a sphere against registered hitboxes.
 
 System.Xml.XmlElement
 
+## `GnsNet.LifecycleReplicationScheduler`1.ConfigureAutomaticVisibility``1(GnsNet.SpatialHashInterestManager{`0,``0},System.Func{System.Collections.Generic.IEnumerable{``0}},System.Func{``0,System.Int64},System.Func{``0,System.ValueTuple{System.Single,System.Single}},System.Func{``0,System.String},System.Func{``0,System.String},System.Func{``0,System.String},System.Func{`0,System.String},System.Func{`0,System.String},System.Func{`0,System.String},System.Func{``0,System.Boolean},System.Func{``0,System.Boolean})`
+
+Configures automatic visibility from a spatial AOI and authoritative scene/team/owner policy. The world is rebuilt before each observer query so lifecycle enter/leave records follow the same filters used by gameplay replication.
+
 ## `GnsNet.LifecycleReplicationScheduler`1.Tick(System.UInt32)`
 
 Runs the AOI pass and automatically delivers observer enter/leave lifecycle records.
@@ -267,6 +271,14 @@ Returns the stable endpoint contract for capability negotiation.
 ## `GnsNet.RpcRouter.RegisterCommand``2(System.String,GnsNet.RpcAuthority,System.Func{GnsNet.RpcRequest,``0,``1})`
 
 Registers a typed MemoryPack command while retaining the endpoint authority policy.
+
+## `GnsNet.SequenceLossTracker.Next`
+
+Allocates the next sequence number to put in an outbound probe.
+
+## `GnsNet.SequenceLossTracker.Observe(System.UInt32)`
+
+Records an observed sequence. Returns false for a duplicate or a bounded-window eviction.
 
 ## `GnsNet.TickLoop.RunAdaptiveAsync(System.Action{System.UInt32,System.TimeSpan},GnsNet.AdaptiveTickController,GnsNet.LoadSheddingPolicy,System.Func{GnsNet.ServerLoad},System.Threading.CancellationToken)`
 
@@ -755,6 +767,10 @@ Client-side request correlation with bounded pending requests and timeouts.
 ## `GnsNet.RpcRouter`
 
 Registers gameplay commands/RPCs with explicit authority and correlated responses.
+
+## `GnsNet.SequenceLossTracker`
+
+Tracks unique application sequence acknowledgements for transport-level loss diagnostics.
 
 ## `GnsNet.ServerInputGuard`2`
 
