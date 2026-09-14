@@ -87,6 +87,14 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void HitboxHistory_RaycastForClientRequiresTrackedViewTime()
+    {
+        var history = new HitboxRewindHistory(); history.Record(10, [new RewindHitbox(7, 5, 0, 1)]); var viewTimes = new RewindViewTimeRegistry<string>(); var auth = new RewindAuthorization(TimeSpan.FromSeconds(2)); DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);
+        Assert.Empty(history.RaycastForClient("p", now, viewTimes, auth, _ => 10, 0, 0, 1, 0, 20));
+        viewTimes.Record("p", now.AddSeconds(-1)); Assert.Single(history.RaycastForClient("p", now, viewTimes, auth, _ => 10, 0, 0, 1, 0, 20));
+    }
+
+    [Fact]
     public void ObserverTracker_EmitsOnlyEnterAndLeaveTransitions()
     {
         var tracker = new ObserverTracker<int, int>(); var entered = new List<int>(); var left = new List<int>(); tracker.Entered += (_, entity) => entered.Add(entity); tracker.Left += (_, entity) => left.Add(entity);

@@ -133,6 +133,11 @@ public sealed class HitboxRewindHistory
         ArgumentNullException.ThrowIfNull(authorization); ArgumentNullException.ThrowIfNull(tickForTime);
         return authorization.TryGetAuthorizedTime(serverNow, claimedViewTime, out DateTimeOffset authorized) ? this.Raycast(tickForTime(authorized), originX, originY, directionX, directionY, maxDistance) : [];
     }
+    public IReadOnlyList<RewindHit> RaycastForClient<TClientId>(TClientId client, DateTimeOffset serverNow, RewindViewTimeRegistry<TClientId> viewTimes, RewindAuthorization authorization, Func<DateTimeOffset, uint> tickForTime, float originX, float originY, float directionX, float directionY, float maxDistance) where TClientId : notnull
+    {
+        ArgumentNullException.ThrowIfNull(viewTimes); ArgumentNullException.ThrowIfNull(tickForTime);
+        return viewTimes.TryGetAuthorized(client, serverNow, authorization, out DateTimeOffset authorized) ? this.Raycast(tickForTime(authorized), originX, originY, directionX, directionY, maxDistance) : [];
+    }
     public void Record(uint tick, IEnumerable<RewindHitbox> hitboxes)
     {
         RewindHitbox[] all = hitboxes?.ToArray() ?? throw new ArgumentNullException(nameof(hitboxes));
