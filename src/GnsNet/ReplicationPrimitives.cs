@@ -106,6 +106,19 @@ public sealed class RewindAuthorization
     { DateTimeOffset floor = serverNow - MaximumRewind; authorized = claimedViewTime < floor ? floor : claimedViewTime > serverNow ? serverNow : claimedViewTime; return claimedViewTime >= floor && claimedViewTime <= serverNow; }
 }
 
+/// <summary>Tracks measured client view times so rewind callers cannot supply an arbitrary timestamp.</summary>
+public sealed class RewindViewTimeRegistry<TClientId> where TClientId : notnull
+{
+    private readonly Dictionary<TClientId, DateTimeOffset> viewTimes = new();
+    public void Record(TClientId client, DateTimeOffset measuredViewTime) => this.viewTimes[client] = measuredViewTime;
+    public bool TryGetAuthorized(TClientId client, DateTimeOffset serverNow, RewindAuthorization authorization, out DateTimeOffset authorized)
+    {
+        ArgumentNullException.ThrowIfNull(authorization); authorized = default;
+        return this.viewTimes.TryGetValue(client, out DateTimeOffset claimed) && authorization.TryGetAuthorizedTime(serverNow, claimed, out authorized);
+    }
+    public bool Remove(TClientId client) => this.viewTimes.Remove(client);
+}
+
 /// <summary>Stores bounded historical hitboxes and performs authoritative 2D ray-circle rewind queries.</summary>
 public sealed class HitboxRewindHistory
 {

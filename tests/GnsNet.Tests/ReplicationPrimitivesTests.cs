@@ -77,6 +77,16 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void RewindViewTimeRegistry_RejectsUnregisteredAndOutOfWindowClaims()
+    {
+        var registry = new RewindViewTimeRegistry<string>(); var authorization = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);
+        Assert.False(registry.TryGetAuthorized("missing", now, authorization, out _));
+        registry.Record("player", now.AddSeconds(-2)); Assert.False(registry.TryGetAuthorized("player", now, authorization, out _));
+        registry.Record("player", now.AddMilliseconds(-100)); Assert.True(registry.TryGetAuthorized("player", now, authorization, out DateTimeOffset authorized)); Assert.Equal(now.AddMilliseconds(-100), authorized);
+        Assert.True(registry.Remove("player"));
+    }
+
+    [Fact]
     public void ObserverTracker_EmitsOnlyEnterAndLeaveTransitions()
     {
         var tracker = new ObserverTracker<int, int>(); var entered = new List<int>(); var left = new List<int>(); tracker.Entered += (_, entity) => entered.Add(entity); tracker.Left += (_, entity) => left.Add(entity);

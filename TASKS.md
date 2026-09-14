@@ -62,8 +62,8 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M4.2 Bounded hitbox budgets
   - [x] Add memory/retention budgets and rejection metrics.
 - [ ] M4.3 Authoritative shooter rewind integration
-  - [ ] Bind measured per-client view time to rewind queries.
-  - [ ] Test hidden-entity and unauthorized-time attacks.
+  - [x] Bind measured per-client view time to rewind queries.
+  - [x] Test hidden-entity and unauthorized-time attacks.
 
 ## M5 — Native and P2P operations
 
