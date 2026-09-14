@@ -34,7 +34,7 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Select channel and priority without per-message caller plumbing.
 - [ ] M2.3 Automatic budgets and shed accounting
   - [x] Integrate byte/message budgets into scheduler.
-  - [ ] Add queue-age/starvation handling.
+  - [x] Add queue-age/starvation handling.
   - [~] Expose per-connection shed/drop decisions (queue-level shed counters are integrated; host aggregation remains open).
 - [ ] M2.4 Malformed-input property/fuzz suite
   - [ ] Fuzz malformed snapshots and baseline loss.

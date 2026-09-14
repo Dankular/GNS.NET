@@ -162,6 +162,17 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void PrioritySendQueue_AgesOldFramesPastStarvationThreshold()
+    {
+        var queue = new PrioritySendQueue(starvationThreshold: 2);
+        queue.Enqueue(new NetFrame(1, 1, [1]), NetChannel.State, 0);
+        queue.Enqueue(new NetFrame(2, 1, [2]), NetChannel.State, 10);
+        queue.Enqueue(new NetFrame(3, 1, [3]), NetChannel.State, 10);
+        Assert.Equal(1, queue.Drain(1).Single().Frame.Opcode);
+        Assert.Equal(1, queue.StarvedFrames);
+    }
+
+    [Fact]
     public async Task BackendBus_RetriesAndAuthenticatesPublish()
     {
         var flaky = new FlakyBus(); var bus = new ReliableBackendBus(flaky, new byte[32]) { RetryDelay = TimeSpan.Zero };
