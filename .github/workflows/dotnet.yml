@@ -134,7 +134,14 @@ jobs:
     - name: Install native build tools
       run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev protobuf-compiler
     - name: Fetch GameNetworkingSockets
-      run: if [ ! -d native/GameNetworkingSockets/.git ]; then git clone --depth 1 --branch "$GNS_REF" https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets; fi
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -d native/GameNetworkingSockets/.git ]; then
+          git clone --filter=blob:none https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets
+        fi
+        git -C native/GameNetworkingSockets fetch --depth 1 origin "$GNS_REF"
+        git -C native/GameNetworkingSockets checkout --detach FETCH_HEAD
     - name: Install native dependencies
       run: timeout --foreground 30m vcpkg install --triplet x64-linux --debug
       working-directory: native/GameNetworkingSockets
@@ -176,7 +183,12 @@ jobs:
       run: choco install ninja --no-progress -y
     - name: Fetch GameNetworkingSockets
       shell: pwsh
-      run: if (-not (Test-Path native/GameNetworkingSockets/.git)) { git clone --depth 1 --branch $env:GNS_REF https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets }
+      run: |
+        if (-not (Test-Path native/GameNetworkingSockets/.git)) {
+          git clone --filter=blob:none https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets
+        }
+        git -C native/GameNetworkingSockets fetch --depth 1 origin $env:GNS_REF
+        git -C native/GameNetworkingSockets checkout --detach FETCH_HEAD
     - name: Install native dependencies
       shell: pwsh
       run: |
