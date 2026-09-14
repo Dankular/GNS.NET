@@ -4,17 +4,21 @@ namespace GnsNet;
 public sealed class NetworkClockSynchronizer
 {
     private bool initialized;
+    private DateTimeOffset? previousSampleTime;
+    private double drift;
     public TimeSpan Offset { get; private set; }
     public TimeSpan Jitter { get; private set; }
     public int Samples { get; private set; }
     public DateTimeOffset ToServerTime(DateTimeOffset clientTime) => clientTime + this.Offset;
+    public double DriftPartsPerMillion => this.drift;
     public void AddSample(DateTimeOffset clientSent, DateTimeOffset serverReceived, DateTimeOffset serverSent, DateTimeOffset clientReceived)
     {
         TimeSpan roundTrip = clientReceived - clientSent - (serverSent - serverReceived);
         TimeSpan offset = ((serverReceived - clientSent) + (serverSent - clientReceived)) / 2;
         if (!this.initialized) { this.Offset = offset; this.Jitter = TimeSpan.Zero; this.initialized = true; }
-        else { this.Jitter = TimeSpan.FromTicks((long)(this.Jitter.Ticks * .9 + Math.Abs((offset - this.Offset).Ticks) * .1)); this.Offset = TimeSpan.FromTicks((long)(this.Offset.Ticks * .875 + offset.Ticks * .125)); }
+        else { this.Jitter = TimeSpan.FromTicks((long)(this.Jitter.Ticks * .9 + Math.Abs((offset - this.Offset).Ticks) * .1)); if (this.previousSampleTime is DateTimeOffset previous && clientSent > previous) this.drift = this.drift * .9 + ((offset - this.Offset).TotalSeconds / (clientSent - previous).TotalSeconds) * 1_000_000 * .1; this.Offset = TimeSpan.FromTicks((long)(this.Offset.Ticks * .875 + offset.Ticks * .125)); }
         this.Samples++;
+        this.previousSampleTime = clientSent;
         LastRoundTrip = roundTrip;
     }
     public TimeSpan LastRoundTrip { get; private set; }
@@ -67,6 +71,18 @@ public sealed class RollbackBuffer<TInput, TState>
 }
 
 public readonly record struct RollbackResult<TState>(TState State, bool Corrected, int ResimulatedTicks);
+
+/// <summary>Applies authoritative scalar corrections over a bounded render duration.</summary>
+public sealed class CorrectionSmoother
+{
+    private float current;
+    private float target;
+    private int remaining;
+    public CorrectionSmoother(float initial = 0) => this.current = this.target = initial;
+    public float Value => this.current;
+    public void Correct(float target, int frames = 6) { if (frames < 1) throw new ArgumentOutOfRangeException(nameof(frames)); this.target = target; this.remaining = frames; }
+    public float Step() { if (this.remaining <= 0) return this.current = this.target; this.current += (this.target - this.current) / this.remaining--; return this.current; }
+}
 
 /// <summary>Compact dirty-field bitset for generated or hand-written replicated state encoders.</summary>
 public sealed class DirtyFieldMask

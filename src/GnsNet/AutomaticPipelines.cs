@@ -30,6 +30,22 @@ public sealed class SnapshotPipeline<TClientId, TEntity, TSnapshot> where TClien
     public void Remove(TClientId client) { this.queues.Remove(client); this.lastSnapshotTicks.Remove(client); this.delta.Remove(client!); this.interest.Remove(client); }
 }
 
+/// <summary>Owns the per-client snapshot pass so game code submits one authoritative world per tick.</summary>
+public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> where TClientId : notnull where TEntity : IMemoryPackable<TEntity> where TSnapshot : IMemoryPackable<TSnapshot>
+{
+    private readonly SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline;
+    private readonly HashSet<TClientId> clients = new();
+    public AutomaticSnapshotScheduler(SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline) => this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+    public void AddClient(TClientId client) => this.clients.Add(client);
+    public void RemoveClient(TClientId client) { this.clients.Remove(client); this.pipeline.Remove(client); }
+    public void Publish(IEnumerable<TEntity> entities, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode, uint tick)
+    {
+        TEntity[] world = entities.ToArray(); foreach (TClientId client in this.clients) this.pipeline.Queue(client, world, snapshot(client), entityOpcode, snapshotOpcode, tick, relevance(client));
+    }
+    public IReadOnlyList<(NetFrame Frame, NetChannel Channel)> Drain(TClientId client, int maxFrames) => this.pipeline.Drain(client, maxFrames);
+    public void Acknowledge(TClientId client, TSnapshot snapshot) => this.pipeline.Acknowledge(client, snapshot);
+}
+
 /// <summary>Registered input endpoint that always runs rate and validation checks before a handler.</summary>
 public sealed class ValidatedInputRouter<TClientId> where TClientId : notnull
 {

@@ -86,11 +86,25 @@ public sealed class SpatialHashInterestManager<TClientId, TEntity> where TClient
         ArgumentNullException.ThrowIfNull(scene); ArgumentNullException.ThrowIfNull(team);
         return this.Cull(client, position, entity => (clientScene is null || scene(entity) == clientScene) && (clientTeam is null || team(entity) == clientTeam) && (visibility is null || visibility(entity)));
     }
+    public IEnumerable<TEntity> Cull(TClientId client, Func<TEntity, (float X, float Y)> position, Func<TEntity, string?> scene, Func<TEntity, string?> team, Func<TEntity, string?> owner, string? clientScene, string? clientTeam, string? clientOwner, Func<TEntity, bool>? visibility = null, Func<TEntity, bool>? occlusion = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene); ArgumentNullException.ThrowIfNull(team); ArgumentNullException.ThrowIfNull(owner);
+        return this.Cull(client, position, entity => (clientScene is null || scene(entity) == clientScene) && (clientTeam is null || team(entity) == clientTeam) && (clientOwner is null || owner(entity) == clientOwner) && (visibility is null || visibility(entity)) && (occlusion is null || occlusion(entity)));
+    }
     private (int X, int Y) Key(float x, float y) => ((int)MathF.Floor(x / this.cellSize), (int)MathF.Floor(y / this.cellSize));
 }
 
 public readonly record struct RewindHitbox(long EntityId, float X, float Y, float Radius);
 public readonly record struct RewindHit(long EntityId, float Distance, uint Tick);
+
+/// <summary>Authorizes rewind queries against a measured view time and a server-defined maximum.</summary>
+public sealed class RewindAuthorization
+{
+    public RewindAuthorization(TimeSpan maximumRewind) { if (maximumRewind <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(maximumRewind)); MaximumRewind = maximumRewind; }
+    public TimeSpan MaximumRewind { get; }
+    public bool TryGetAuthorizedTime(DateTimeOffset serverNow, DateTimeOffset claimedViewTime, out DateTimeOffset authorized)
+    { DateTimeOffset floor = serverNow - MaximumRewind; authorized = claimedViewTime < floor ? floor : claimedViewTime > serverNow ? serverNow : claimedViewTime; return claimedViewTime >= floor && claimedViewTime <= serverNow; }
+}
 
 /// <summary>Stores bounded historical hitboxes and performs authoritative 2D ray-circle rewind queries.</summary>
 public sealed class HitboxRewindHistory
@@ -99,6 +113,11 @@ public sealed class HitboxRewindHistory
     private readonly LinkedList<(uint Tick, RewindHitbox[] Hitboxes)> frames = new();
     public HitboxRewindHistory(int capacity = 128) { if (capacity < 2) throw new ArgumentOutOfRangeException(nameof(capacity)); this.capacity = capacity; }
     public int Count => this.frames.Count;
+    public IReadOnlyList<RewindHit> RaycastAuthorized(DateTimeOffset serverNow, DateTimeOffset claimedViewTime, RewindAuthorization authorization, Func<DateTimeOffset, uint> tickForTime, float originX, float originY, float directionX, float directionY, float maxDistance)
+    {
+        ArgumentNullException.ThrowIfNull(authorization); ArgumentNullException.ThrowIfNull(tickForTime);
+        return authorization.TryGetAuthorizedTime(serverNow, claimedViewTime, out DateTimeOffset authorized) ? this.Raycast(tickForTime(authorized), originX, originY, directionX, directionY, maxDistance) : [];
+    }
     public void Record(uint tick, IEnumerable<RewindHitbox> hitboxes)
     { this.frames.AddLast((tick, hitboxes.ToArray())); while (this.frames.Count > this.capacity) this.frames.RemoveFirst(); }
     public IReadOnlyList<RewindHit> Raycast(uint tick, float originX, float originY, float directionX, float directionY, float maxDistance)

@@ -13,6 +13,7 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
 {
     private static readonly DiagnosticDescriptor MustBePartial = new("GNS001", "Generated network contract requires partial type", "Type '{0}' must be partial when annotated with a GnsNet generator attribute", "GnsNet", DiagnosticSeverity.Error, true);
     private static readonly DiagnosticDescriptor DuplicateId = new("GNS002", "Duplicate generated network message ID", "Generated ID {0} for '{1}' is already used by another generated message", "GnsNet", DiagnosticSeverity.Error, true);
+    private static readonly DiagnosticDescriptor DuplicateRpc = new("GNS003", "Duplicate generated RPC endpoint", "Generated RPC endpoint '{0}' is declared by more than one contract", "GnsNet", DiagnosticSeverity.Error, true);
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         IncrementalValuesProvider<ClassDeclarationSyntax> candidates = context.SyntaxProvider.CreateSyntaxProvider(
@@ -22,6 +23,8 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
         {
             foreach (IGrouping<uint, ClassDeclarationSyntax> group in types.Where(t => t.AttributeLists.SelectMany(x => x.Attributes).Any(a => a.Name.ToString().EndsWith("GenerateNetMessage", StringComparison.Ordinal))).GroupBy(t => Hash(t.Identifier.Text) % 65535 + 1).Where(g => g.Select(t => t.Identifier.Text).Distinct(StringComparer.Ordinal).Count() > 1))
                 foreach (ClassDeclarationSyntax type in group) production.ReportDiagnostic(Diagnostic.Create(DuplicateId, type.Identifier.GetLocation(), group.Key, type.Identifier.Text));
+            foreach (IGrouping<string, ClassDeclarationSyntax> group in types.Where(t => t.AttributeLists.SelectMany(x => x.Attributes).Any(a => a.Name.ToString().EndsWith("GenerateNetRpc", StringComparison.Ordinal))).GroupBy(RpcEndpoint, StringComparer.Ordinal).Where(g => g.Select(t => t.Identifier.Text).Distinct(StringComparer.Ordinal).Count() > 1))
+                foreach (ClassDeclarationSyntax type in group) production.ReportDiagnostic(Diagnostic.Create(DuplicateRpc, type.Identifier.GetLocation(), group.Key));
         });
         context.RegisterSourceOutput(candidates, static (production, type) =>
         {
@@ -33,7 +36,13 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
             if (!type.Modifiers.Any(x => x.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword))) { production.ReportDiagnostic(Diagnostic.Create(MustBePartial, type.Identifier.GetLocation(), type.Identifier.Text)); return; }
             string ns = GetNamespace(type); string name = type.Identifier.Text; uint id = Hash(name);
             var members = new StringBuilder(); if (schema) members.AppendLine("    public const int GeneratedNetworkSchemaVersion = 1;");
-            if (message) members.AppendLine($"    public const ushort GeneratedNetworkMessageId = {id % 65535 + 1};");
+            if (message)
+            {
+                members.AppendLine($"    public const ushort GeneratedNetworkMessageId = {id % 65535 + 1};");
+                PropertyDeclarationSyntax[] fields = type.Members.OfType<PropertyDeclarationSyntax>().ToArray();
+                members.AppendLine($"    public const int GeneratedNetworkFieldCount = {fields.Length};");
+                members.AppendLine($"    public static readonly string[] GeneratedNetworkFieldNames = new string[] {{ {string.Join(", ", fields.Select(x => "\"" + x.Identifier.Text + "\""))} }};");
+            }
             if (rpc)
             {
                 AttributeSyntax rpcAttribute = type.AttributeLists.SelectMany(x => x.Attributes).First(x => x.Name.ToString().EndsWith("GenerateNetRpc", StringComparison.Ordinal));
@@ -53,4 +62,6 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
     }
     private static uint Hash(string value)
     { uint hash = 2166136261; foreach (char c in value) { hash ^= c; hash *= 16777619; } return hash; }
+    private static string RpcEndpoint(ClassDeclarationSyntax type)
+    { AttributeSyntax? attr = type.AttributeLists.SelectMany(x => x.Attributes).FirstOrDefault(x => x.Name.ToString().EndsWith("GenerateNetRpc", StringComparison.Ordinal)); return attr?.ArgumentList?.Arguments.FirstOrDefault()?.Expression.ToString().Trim('"') ?? type.Identifier.Text; }
 }

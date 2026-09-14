@@ -47,4 +47,13 @@ public sealed class PredictionRuntimeTests
         RollbackResult<int> result = bounded.ReconcileDetailed(1, 0, (state, input) => state + input);
         Assert.True(result.Corrected); Assert.Equal(1, result.ResimulatedTicks); Assert.Equal(1, bounded.CorrectionCount);
     }
+
+    [Fact]
+    public void ClockAndCorrectionSmoother_TrackDriftAndConverge()
+    {
+        var clock = new NetworkClockSynchronizer(); DateTimeOffset origin = DateTimeOffset.UnixEpoch;
+        clock.AddSample(origin, origin.AddMilliseconds(50), origin.AddMilliseconds(50), origin.AddMilliseconds(100)); clock.AddSample(origin.AddSeconds(1), origin.AddSeconds(1).AddMilliseconds(51), origin.AddSeconds(1).AddMilliseconds(51), origin.AddSeconds(1).AddMilliseconds(100));
+        Assert.NotEqual(0, clock.DriftPartsPerMillion);
+        var smoother = new CorrectionSmoother(0); smoother.Correct(12, 3); Assert.Equal(4, smoother.Step()); Assert.Equal(8, smoother.Step()); Assert.Equal(12, smoother.Step());
+    }
 }

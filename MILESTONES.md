@@ -55,7 +55,7 @@ and the end-to-end test that allocates a dedicated server before the gameplay cl
 
 - [x] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
 - [~] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; automatic transport rehydration remains.
-- [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; command classes, timeout, and client-target routing remain.
+- [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; generated registration and correlation exist, but command classes, timeout, and client-target routing remain.
 - [~] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons. Scene transition messages remain.
 - [~] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join; current tests cover core idempotency/authority/late join, not the full reconnect integration.
 
@@ -63,8 +63,8 @@ Exit criteria: a sample game can create entities, transfer ownership, call an au
 
 ### M2 — Production replication protocol
 
-- [~] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; masks/quantization/compression and basic schema metadata exist, but generated fields/compatibility negotiation remain.
-- [~] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; the current pipeline still requires caller invocation.
+- [~] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; generated field metadata now exists, but generated field encoders and compatibility negotiation remain.
+- [~] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; automatic world publication now exists, but lifecycle records and caller-free tick integration remain.
 - [~] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters; queue/load controls exist but are not fully integrated into automatic snapshot scheduling.
 - [x] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.
 - [ ] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets.
@@ -76,18 +76,18 @@ Exit criteria: callers submit authoritative entities/components once; the runtim
 - [~] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement; offset/jitter and tick rate exist, drift measurement remains.
 - [~] Add client/server tick negotiation and bounded catch-up/slow-down behavior; negotiation/catch-up exists, full loop integration remains.
 - [~] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick; bounded generic rollback exists, full state metadata/runtime integration remains.
-- [~] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation; limits/count/extrapolation exist, magnitude/smoothing remain.
+- [~] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation; limits/count/smoothing/extrapolation exist, magnitude calculation remains.
 - [ ] Add tests under artificial latency, jitter, loss, duplicate snapshots, clock drift, and long rollback windows.
 
 Exit criteria: the sample client predicts immediately, rewinds to an authoritative tick, replays inputs to present, smooths corrections, and exposes prediction cost/misprediction data.
 
 ### M4 — Visibility and lag-compensated gameplay
 
-- [~] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions; distance/scene/team/custom visibility exist, owner/occlusion remain.
-- [ ] Add observer enter/leave events and visibility-safe spawn/despawn ordering.
+- [~] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions; all rule predicates now exist, but visibility-safe lifecycle delivery remains.
+- [~] Add observer enter/leave events and visibility-safe spawn/despawn ordering; observer enter/leave tracking exists, ordering integration remains.
 - [~] Add a registered historical hitbox/collider representation with bounded retention and memory budgets; bounded hitbox history exists, memory budgets remain.
-- [~] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; queries exist, maximum rewind policy remains.
-- [ ] Add security tests proving hidden entities are not serialized and clients cannot select another client’s rewind time.
+- [~] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; authorized query clamping/rejection exists, but full per-client integration remains.
+- [~] Add security tests proving hidden entities are not serialized and clients cannot select another client’s rewind time; unauthorized view-time rejection is covered, hidden-entity serialization coverage remains.
 
 Exit criteria: a sample shooter can register hitboxes, perform an authoritative rewind query using the shooter’s measured view time, and replicate only valid observers.
 

@@ -120,6 +120,15 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void AutomaticSnapshotScheduler_PublishesOneWorldToAllRegisteredClients()
+    {
+        var interest = new InterestManager<string, TestEntity>(); interest.SetView("a", new(0, 0, 5)); interest.SetView("b", new(0, 0, 5));
+        var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(interest, new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));
+        var scheduler = new AutomaticSnapshotScheduler<string, TestEntity, TestState>(pipeline); scheduler.AddClient("a"); scheduler.AddClient("b"); scheduler.Publish([new TestEntity { X = 1 }], _ => new TestState { Value = 7 }, _ => 1, 2, 3, 1);
+        Assert.Equal(2, scheduler.Drain("a", 10).Count); Assert.Equal(2, scheduler.Drain("b", 10).Count);
+    }
+
+    [Fact]
     public async Task BackendBus_RetriesAndAuthenticatesPublish()
     {
         var flaky = new FlakyBus(); var bus = new ReliableBackendBus(flaky, new byte[32]) { RetryDelay = TimeSpan.Zero };

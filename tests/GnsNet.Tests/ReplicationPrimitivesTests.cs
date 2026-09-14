@@ -48,6 +48,13 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void SpatialHash_AppliesOwnerAndOcclusionFilters()
+    {
+        var manager = new SpatialHashInterestManager<int, (int Id, float X, float Y, string Owner)>(10); var entities = new[] { (1, 1f, 1f, "p"), (2, 2f, 2f, "q") }; manager.SetView(1, new(0, 0, 10)); manager.Rebuild(entities, e => (e.X, e.Y));
+        Assert.Equal(new[] { 1 }, manager.Cull(1, e => (e.X, e.Y), _ => "A", e => "red", e => e.Owner, "A", "red", "p", occlusion: e => e.Id == 1).Select(e => e.Id));
+    }
+
+    [Fact]
     public async Task TraversalTester_UsesRelayWhenDirectFails()
     {
         P2PTraversalResult result = await P2PTraversalTester.TestAsync(_ => Task.FromResult(false), _ => Task.FromResult(true), TimeSpan.FromSeconds(1));
@@ -59,6 +66,27 @@ public sealed class ReplicationPrimitivesTests
     {
         var history = new HitboxRewindHistory(); history.Record(10, [new RewindHitbox(1, 5, 0, 1)]); history.Record(11, [new RewindHitbox(1, 7, 0, 1)]);
         Assert.Single(history.RaycastSubTick(10.5, 0, 0, 1, 0, 20)); Assert.Single(history.SphereCast(11, 7, 0, .1f)); Assert.Single(history.BoxCast(11, 6, -1, 8, 1));
+    }
+
+    [Fact]
+    public void ObserverTracker_EmitsOnlyEnterAndLeaveTransitions()
+    {
+        var tracker = new ObserverTracker<int, int>(); var entered = new List<int>(); var left = new List<int>(); tracker.Entered += (_, entity) => entered.Add(entity); tracker.Left += (_, entity) => left.Add(entity);
+        tracker.Update(1, [2, 3]); tracker.Update(1, [3, 4]); Assert.Equal(new[] { 2, 3, 4 }, entered); Assert.Equal(new[] { 2 }, left);
+    }
+
+    [Fact]
+    public void RewindAuthorization_ClampsOnlyWithinServerWindowAndRejectsFuture()
+    {
+        var auth = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.True(auth.TryGetAuthorizedTime(now, now.AddMilliseconds(-500), out _)); Assert.False(auth.TryGetAuthorizedTime(now, now.AddSeconds(-2), out DateTimeOffset clamped)); Assert.Equal(now.AddSeconds(-1), clamped); Assert.False(auth.TryGetAuthorizedTime(now, now.AddMilliseconds(1), out _));
+    }
+
+    [Fact]
+    public void HitboxHistory_RejectsUnauthorizedClientViewTime()
+    {
+        var history = new HitboxRewindHistory(); history.Record(10, [new RewindHitbox(1, 5, 0, 1)]); var auth = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.Empty(history.RaycastAuthorized(now, now.AddSeconds(-2), auth, _ => 10, 0, 0, 1, 0, 20)); Assert.Single(history.RaycastAuthorized(now, now.AddMilliseconds(-500), auth, _ => 10, 0, 0, 1, 0, 20));
     }
 
     [Fact]
