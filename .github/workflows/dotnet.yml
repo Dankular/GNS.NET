@@ -121,6 +121,7 @@ jobs:
 
   native-linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
     - name: Cache native dependencies
@@ -161,6 +162,7 @@ jobs:
 
   native-windows:
     runs-on: windows-2022
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
     - name: Cache native dependencies
@@ -210,6 +212,7 @@ jobs:
   native-windows-runtime:
     needs: native-windows
     runs-on: windows-2022
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
@@ -241,6 +244,7 @@ jobs:
   native-linux-runtime:
     needs: native-linux
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
@@ -272,6 +276,7 @@ jobs:
   native-artifact-consumer:
     needs: [native-linux, native-windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - name: Download Linux native artifact
       uses: actions/download-artifact@v4
