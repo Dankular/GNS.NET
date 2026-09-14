@@ -223,7 +223,7 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst, b
 {
     if (!authenticated && !options.Insecure) throw new InvalidOperationException("Native authentication is not configured for this loopback harness. Pass --insecure explicitly for development-only transport coverage.");
     byte[]? certificate = options.NativeCertificatePath is null ? null : File.ReadAllBytes(options.NativeCertificatePath);
-    using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, NativeCertificate = certificate, RequireNativeAuthentication = authenticated, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
+    using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, NativeCertificate = certificate, RequireNativeAuthentication = authenticated, Impairment = options.NativeLossPercent == 0 ? null : new GnsImpairmentOptions { LossSendPercent = options.NativeLossPercent, LossReceivePercent = options.NativeLossPercent }, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
     using GnsServer server = GnsServer.Listen("[::]:27991", Math.Max(64, options.Clients * 2));
     server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = authenticated, RequireEncrypted = authenticated };
     var clients = new List<GnsClient>(options.Clients);
@@ -385,7 +385,7 @@ readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Ela
 readonly record struct MatrixProfile(int Clients, int Entities, int PayloadBytes, double LossPercent, bool Reconnect);
 readonly record struct MatrixProfileResult(MatrixProfile Profile, int Frames, int CapturedPackets, int DeliveredPackets, int ReplayedLifecycleRecords);
 
-sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, string Address, string? NativeCertificatePath, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
+sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, string Address, string? NativeCertificatePath, int NativeLossPercent, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -394,7 +394,9 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
         if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "authenticated-transport" or "p2p" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, authenticated-transport, p2p, saturation, playfab, or matrix.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
-        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), Value(args, "--address") ?? "127.0.0.1:27991", Value(args, "--native-certificate-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
+        int nativeLoss = Number(args, "--native-loss-percent", 0);
+        if (nativeLoss is < 0 or > 100) throw new ArgumentException("--native-loss-percent must be between 0 and 100.");
+        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), Value(args, "--address") ?? "127.0.0.1:27991", Value(args, "--native-certificate-path"), nativeLoss, args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
     }
     private static int Number(string[] args, string name, int fallback) => int.TryParse(Value(args, name), out int value) ? value : fallback;
     private static string? Value(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
