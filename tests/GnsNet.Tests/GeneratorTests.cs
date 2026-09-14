@@ -15,6 +15,6 @@ public sealed class GeneratorTests
     {
         Assert.Equal(1, GeneratedMessageMarker.GeneratedNetworkSchemaVersion);
         Assert.InRange(GeneratedMessageMarker.GeneratedNetworkMessageId, (ushort)1, ushort.MaxValue);
-        Assert.Equal("GeneratedMessageMarker", GeneratedMessageMarker.GeneratedRpcEndpoint);
+        Assert.Equal("marker.update", GeneratedMessageMarker.GeneratedRpcEndpoint);
     }
 }
