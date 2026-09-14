@@ -4,16 +4,18 @@ public sealed class ClientPrediction<TInput, TState>
 {
     private readonly Dictionary<uint, TInput> pending = new();
     public int PendingCount => this.pending.Count;
+    public int LastResimulatedTicks { get; private set; }
+    public bool LastCorrected { get; private set; }
     public void Add(uint tick, TInput input) => this.pending[tick] = input;
     public TState Reconcile(uint acknowledgedTick, TState authoritative, Func<TState, TInput, TState> simulate)
     {
-        TState state = authoritative;
+        TState state = authoritative; int replayed = 0;
         foreach ((uint tick, TInput input) in this.pending.Where(x => TickSequence.IsNewer(acknowledgedTick, x.Key)).OrderBy(x => unchecked(x.Key - acknowledgedTick)).ToArray())
         {
-            state = simulate(state, input);
+            state = simulate(state, input); replayed++;
         }
         foreach (uint tick in this.pending.Keys.Where(tick => !TickSequence.IsNewer(acknowledgedTick, tick)).ToArray()) this.pending.Remove(tick);
-        return state;
+        this.LastResimulatedTicks = replayed; this.LastCorrected = replayed != 0; return state;
     }
 }
 

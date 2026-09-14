@@ -47,6 +47,16 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void ClientPrediction_ReportsReconciliationCostAndCorrection()
+    {
+        var prediction = new ClientPrediction<int, int>(); prediction.Add(2, 3); prediction.Add(3, 4);
+        Assert.Equal(7, prediction.Reconcile(1, 0, (state, input) => state + input));
+        Assert.True(prediction.LastCorrected); Assert.Equal(2, prediction.LastResimulatedTicks); Assert.Equal(2, prediction.PendingCount);
+        prediction.Reconcile(3, 10, (state, input) => state + input);
+        Assert.False(prediction.LastCorrected); Assert.Equal(0, prediction.LastResimulatedTicks); Assert.Equal(0, prediction.PendingCount);
+    }
+
+    [Fact]
     public void DirtyMaskQuantizationAndExtrapolationAreDeterministic()
     {
         var mask = new DirtyFieldMask(65); mask.Set(64); Assert.True(mask.IsSet(64)); mask.Clear(); Assert.False(mask.IsSet(64));

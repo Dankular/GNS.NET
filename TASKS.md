@@ -49,7 +49,7 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M3.2 Clock/tick policy integration
   - [ ] Apply measured drift to synchronization policy.
   - [ ] Integrate bounded catch-up/slow-down into TickLoop.
-  - [ ] Expose prediction cost and misprediction magnitude.
+  - [x] Expose prediction cost and misprediction magnitude.
 - [ ] M3.3 Impairment and long-rollback tests
   - [ ] Test latency, jitter, packet loss, and duplicate snapshots.
   - [ ] Test clock drift and long rollback windows.

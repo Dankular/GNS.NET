@@ -68,6 +68,8 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
     public SnapshotBuffer<TState> Snapshots { get; }
     public TState PredictedState { get; private set; }
     public TState? AuthoritativeState { get; private set; }
+    public int LastResimulatedTicks => this.Prediction.LastResimulatedTicks;
+    public bool LastCorrected => this.Prediction.LastCorrected;
     public event Action<TState>? StateReconciled;
 
     public GnsPredictedClient(GnsClientHost host, TState initialState, Func<TState, TInput, TState> simulate,
