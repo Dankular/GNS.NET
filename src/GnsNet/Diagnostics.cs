@@ -29,7 +29,7 @@ public sealed class NetworkConditionSimulator
 
 public sealed class ConnectionMetrics
 {
-    private long bytesIn, bytesOut, packetsIn, packetsOut, lostPackets;
+    private long bytesIn, bytesOut, packetsIn, packetsOut, lostPackets, shedFrames, shedBytes;
     private readonly Queue<bool> probeResults = new();
     private readonly object probeLock = new();
     private double rttMilliseconds;
@@ -37,15 +37,17 @@ public sealed class ConnectionMetrics
     public long PacketsIn => Interlocked.Read(ref this.packetsIn); public long PacketsOut => Interlocked.Read(ref this.packetsOut);
     public double PacketLossPercent { get { lock (this.probeLock) return this.probeResults.Count == 0 ? 0 : 100d * this.probeResults.Count(x => !x) / this.probeResults.Count; } }
     public double RttMilliseconds => Volatile.Read(ref this.rttMilliseconds);
+    public long ShedFrames => Interlocked.Read(ref this.shedFrames); public long ShedBytes => Interlocked.Read(ref this.shedBytes);
     public void RecordIn(int bytes) { Interlocked.Add(ref this.bytesIn, bytes); Interlocked.Increment(ref this.packetsIn); }
     public void RecordOut(int bytes, bool delivered = true) { Interlocked.Add(ref this.bytesOut, bytes); Interlocked.Increment(ref this.packetsOut); if (!delivered) Interlocked.Increment(ref this.lostPackets); }
     public void RecordSequenceSent() { }
     public void RecordSequenceAcknowledged() { lock (this.probeLock) { this.probeResults.Enqueue(true); while (this.probeResults.Count > 128) this.probeResults.Dequeue(); } }
     public void RecordLostPacket() { Interlocked.Increment(ref this.lostPackets); lock (this.probeLock) { this.probeResults.Enqueue(false); while (this.probeResults.Count > 128) this.probeResults.Dequeue(); } }
     public void RecordRtt(TimeSpan rtt) => Volatile.Write(ref this.rttMilliseconds, rtt.TotalMilliseconds);
+    public void RecordShed(int frames, long bytes) { Interlocked.Add(ref this.shedFrames, frames); Interlocked.Add(ref this.shedBytes, bytes); }
 }
 
-public readonly record struct ConnectionMetricsSnapshot(string ConnectionId, long BytesIn, long BytesOut, long PacketsIn, long PacketsOut, double RttMilliseconds, double PacketLossPercent);
+public readonly record struct ConnectionMetricsSnapshot(string ConnectionId, long BytesIn, long BytesOut, long PacketsIn, long PacketsOut, double RttMilliseconds, double PacketLossPercent, long ShedFrames = 0, long ShedBytes = 0);
 
 /// <summary>Produces a renderer-neutral diagnostics line suitable for an in-game network overlay.</summary>
 public static class NetworkDebugOverlay
@@ -53,7 +55,7 @@ public static class NetworkDebugOverlay
     public static ConnectionMetricsSnapshot Snapshot(string connectionId, ConnectionMetrics metrics)
     {
         ArgumentNullException.ThrowIfNull(connectionId); ArgumentNullException.ThrowIfNull(metrics);
-        return new(connectionId, metrics.BytesIn, metrics.BytesOut, metrics.PacketsIn, metrics.PacketsOut, metrics.RttMilliseconds, metrics.PacketLossPercent);
+        return new(connectionId, metrics.BytesIn, metrics.BytesOut, metrics.PacketsIn, metrics.PacketsOut, metrics.RttMilliseconds, metrics.PacketLossPercent, metrics.ShedFrames, metrics.ShedBytes);
     }
     public static string Format(ConnectionMetricsSnapshot snapshot)
         => string.Format(CultureInfo.InvariantCulture, "NET {0} | RTT {1:0.0} ms | LOSS {2:0.0}% | IN {3} pkts/{4} B | OUT {5} pkts/{6} B", snapshot.ConnectionId, snapshot.RttMilliseconds, snapshot.PacketLossPercent, snapshot.PacketsIn, snapshot.BytesIn, snapshot.PacketsOut, snapshot.BytesOut);

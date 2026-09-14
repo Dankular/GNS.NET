@@ -35,7 +35,7 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M2.3 Automatic budgets and shed accounting
   - [x] Integrate byte/message budgets into scheduler.
   - [x] Add queue-age/starvation handling.
-  - [~] Expose per-connection shed/drop decisions (queue-level shed counters are integrated; host aggregation remains open).
+  - [x] Expose per-connection shed/drop decisions.
 - [ ] M2.4 Malformed-input property/fuzz suite
   - [ ] Fuzz malformed snapshots and baseline loss.
   - [ ] Fuzz schema mismatch, tick wraparound, and partial entities.

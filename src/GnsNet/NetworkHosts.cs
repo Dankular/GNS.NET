@@ -239,6 +239,8 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     }
     public EResult Flush(GnsConnection connection, PrioritySendQueue queue, int maxFrames)
     {
+        (int Frames, long Bytes) shed = queue.ConsumeShed();
+        if (shed.Frames != 0) this.MetricsByConnection.GetOrAdd(connection.Handle.Handle, _ => new()).RecordShed(shed.Frames, shed.Bytes);
         var reliable = new NetBatch();
         var unreliable = new NetBatch();
         foreach (var item in queue.Drain(maxFrames)) (item.Channel == NetChannel.Event ? reliable : unreliable).Add(item.Frame);

@@ -29,6 +29,10 @@ public sealed class PrioritySendQueue
         { this.ShedFrames++; this.ShedBytes += bytes; return false; }
         this.queue.Add((frame, channel, Math.Max(0, relevance), this.nextSequence++)); this.queuedBytes += bytes; return true;
     }
+    public (int Frames, long Bytes) ConsumeShed()
+    {
+        (int Frames, long Bytes) result = (this.ShedFrames, this.ShedBytes); this.ShedFrames = 0; this.ShedBytes = 0; return result;
+    }
     public IReadOnlyList<(NetFrame Frame, NetChannel Channel)> Drain(int maxFrames)
     {
         if (maxFrames < 0) throw new ArgumentOutOfRangeException(nameof(maxFrames));
