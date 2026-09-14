@@ -10,6 +10,7 @@ Console.WriteLine($"Runtime: {Environment.Version} | CPU threads: {Environment.P
 if (options.Scenario is "all" or "serialize") Run("MemoryPack serialize + deserialize", options, BenchmarkSerialization);
 if (options.Scenario is "all" or "stress") Run("concurrent client serialization stress", options, BenchmarkConcurrentSerialization);
 if (options.Scenario is "transport") RunTransport(options);
+if (options.Scenario is "p2p") await RunP2P(options);
 if (options.Scenario is "saturation") RunSaturation(options);
 if (options.Scenario is "playfab") await RunPlayFab(options);
 if (options.Scenario is "all" or "batch") Run("NetBatch encode + decode", options, BenchmarkBatch);
@@ -25,11 +26,76 @@ if (options.JsonPath is not null && options.Scenario is not "saturation")
     Console.WriteLine($"Benchmark JSON: {options.JsonPath}");
 }
 
+if (options.Scenario == "matrix") RunMatrix(options);
+
 void Run(string name, BenchmarkOptions options, Func<BenchmarkOptions, BenchmarkResult> benchmark)
 {
     BenchmarkResult result = benchmark(options);
     benchmarkResults.Add(new { name, result.Operations, result.Bytes, elapsedMs = options.Deterministic ? 0 : result.Elapsed.TotalMilliseconds, allocated = options.Deterministic ? 0 : result.Allocated, opsPerSecond = options.Deterministic ? 0 : result.Operations / Math.Max(result.Elapsed.TotalSeconds, double.Epsilon), fingerprint = result.Fingerprint });
     Console.WriteLine($"{name}: {result.Operations:N0} ops | {result.Operations / result.Elapsed.TotalSeconds:N0} ops/s | {result.Bytes / 1024d / 1024d:N2} MiB processed | {result.Allocated / (double)Math.Max(1, result.Operations):N1} B/op | {result.Elapsed.TotalMilliseconds:N1} ms");
+}
+
+void RunMatrix(BenchmarkOptions options)
+{
+    var profiles = new List<MatrixProfileResult>();
+    int[] clients = [1, options.Clients];
+    int[] entities = [Math.Min(32, options.Entities), options.Entities];
+    int[] payloads = [Math.Min(32, options.PayloadBytes), options.PayloadBytes];
+    foreach (int clientCount in clients.Distinct())
+        foreach (int entityCount in entities.Distinct())
+            foreach (int payloadBytes in payloads.Distinct())
+                foreach (double lossPercent in new[] { 0d, 10d })
+                    foreach (bool reconnect in new[] { false, true })
+                    {
+                        MatrixProfile profile = new(clientCount, entityCount, Math.Max(1, payloadBytes), lossPercent, reconnect);
+                        MatrixProfileResult result = BenchmarkMatrixProfile(profile, options.Iterations);
+                        profiles.Add(result);
+                        Console.WriteLine($"Matrix clients={clientCount} entities={entityCount} payload={profile.PayloadBytes} loss={lossPercent:0}% reconnect={reconnect}: frames={result.Frames:N0} replayed={result.ReplayedLifecycleRecords:N0} delivered={result.DeliveredPackets:N0}/{result.CapturedPackets:N0}");
+                    }
+    if (options.JsonPath is not null)
+    {
+        string json = System.Text.Json.JsonSerializer.Serialize(new { schema = 1, deterministic = options.Deterministic, scenario = "matrix", iterations = options.Iterations, profiles }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(options.JsonPath, json);
+        Console.WriteLine($"Matrix JSON: {options.JsonPath}");
+    }
+}
+
+static MatrixProfileResult BenchmarkMatrixProfile(MatrixProfile profile, int iterations)
+{
+    var room = new RoomLifecycle<string>(Math.Max(2, profile.Clients)) { AllowLateJoin = true };
+    for (int client = 0; client < profile.Clients; client++) { string id = $"client-{client}"; room.Join(id); room.SetReady(id, true); }
+    if (room.Phase == RoomPhase.Ready) { room.Start(); room.BeginGame(); }
+    List<BenchmarkEntity> entities = Enumerable.Range(0, profile.Entities).Select(i => new BenchmarkEntity(i, i % 100, i % 70)).ToList();
+    var interest = new InterestManager<string, BenchmarkEntity>();
+    var delta = new DeltaCompressor<BenchmarkSnapshot>((_, current) => current, (_, current) => current);
+    var pipeline = new SnapshotPipeline<string, BenchmarkEntity, BenchmarkSnapshot>(interest, delta, entity => (entity.X, entity.Y));
+    for (int client = 0; client < profile.Clients; client++) interest.SetView($"client-{client}", new(50, 35, 100));
+    var conditions = new NetworkConditionSimulator(new NetworkConditions(TimeSpan.Zero, TimeSpan.Zero, profile.LossPercent), seed: 17);
+    var recorder = new NetworkRecorder();
+    int frames = 0, captured = 0, delivered = 0, replayed = 0;
+    if (profile.Reconnect)
+    {
+        var authoritative = new NetworkObjectRegistry<string>(); var clientObjects = new NetworkObjectRegistry<string>();
+        var rehydration = new SessionRehydrationBuffer<string>(Math.Max(16, profile.Entities * 2));
+        NetworkObjectDescriptor objectRecord = authoritative.Spawn(1, "client-0", 1);
+        rehydration.Record("client-0", new NetworkObjectChange(NetworkObjectChangeKind.Spawned, objectRecord));
+        replayed = rehydration.Replay("client-0", clientObjects);
+    }
+    for (uint tick = 1; tick <= iterations; tick++)
+        for (int client = 0; client < profile.Clients; client++)
+        {
+            string id = $"client-{client}";
+            pipeline.Queue(id, entities, new BenchmarkSnapshot(tick, client, entities.Count), 1, 2, tick, 1f);
+            foreach ((NetFrame Frame, NetChannel Channel) item in pipeline.Drain(id, 4_096))
+            {
+                byte[] payload = item.Frame.Payload.Length >= profile.PayloadBytes ? item.Frame.Payload : item.Frame.Payload.Concat(new byte[profile.PayloadBytes - item.Frame.Payload.Length]).ToArray();
+                recorder.Record(true, payload, DateTimeOffset.UnixEpoch.AddTicks(frames), id, item.Channel);
+                captured++; frames++; if (!conditions.ShouldDrop()) delivered++;
+            }
+            pipeline.Acknowledge(id, new BenchmarkSnapshot(tick, client, entities.Count));
+        }
+    int replayDelivered = recorder.ReplayTransportAsync(_ => ValueTask.FromResult(true), speed: double.MaxValue).GetAwaiter().GetResult();
+    return new(profile, frames, captured, Math.Min(delivered, replayDelivered), replayed);
 }
 
 static void RunTransport(BenchmarkOptions options)
@@ -44,6 +110,52 @@ static void RunTransport(BenchmarkOptions options)
     {
         Console.WriteLine($"GNS loopback transport: unavailable ({exception.Message})");
         Console.WriteLine("Build or provide the native GameNetworkingSockets library, then pass --native-path <path>.");
+    }
+}
+
+async Task RunP2P(BenchmarkOptions options)
+{
+    if (!options.Insecure) throw new InvalidOperationException("The local P2P benchmark is intentionally unauthenticated; pass --insecure explicitly.");
+    try
+    {
+        using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, RequireNativeAuthentication = false });
+        using GnsServer server = GnsServer.ListenP2P(0, Math.Max(64, options.Iterations));
+        server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
+        SteamNetworkingIdentity identity = default;
+        if (!ISteamNetworkingSockets.User!.GetIdentity(out identity) || identity.IsInvalid())
+            throw new InvalidOperationException("The native GNS backend did not provide a usable local P2P identity.");
+
+        using GnsClient client = GnsClient.ConnectP2P(identity.ToString());
+        client.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
+        var connected = new ManualResetEventSlim();
+        client.Connected += connected.Set;
+        Stopwatch connectTimer = Stopwatch.StartNew();
+        if (!connected.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Timed out waiting for the local P2P connection.");
+        connectTimer.Stop();
+
+        byte[] payload = new byte[Math.Clamp(options.PayloadBytes, 1, 64 * 1024)];
+        int echoed = 0;
+        Stopwatch timer = Stopwatch.StartNew();
+        for (int iteration = 0; iteration < options.Iterations; iteration++)
+        {
+            client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay);
+            Stopwatch wait = Stopwatch.StartNew();
+            while (wait.Elapsed < TimeSpan.FromMilliseconds(250))
+            {
+                foreach (ReceivedMessage message in server.Poll()) server.Send(message.Connection, message.Data, ESteamNetworkingSendType.UnreliableNoDelay);
+                if (client.Poll().Count > 0) { echoed++; break; }
+                await Task.Yield();
+            }
+        }
+        timer.Stop();
+        benchmarkResults.Add(new { name = "local P2P identity/loopback", operations = echoed, bytes = echoed * payload.Length * 2L, elapsedMs = timer.Elapsed.TotalMilliseconds, connectMs = connectTimer.Elapsed.TotalMilliseconds, identity = identity.ToString() });
+        Console.WriteLine($"GNS local P2P loopback: {echoed:N0}/{options.Iterations:N0} echoed | connect={connectTimer.Elapsed.TotalMilliseconds:N1} ms | elapsed={timer.Elapsed.TotalMilliseconds:N1} ms");
+    }
+    catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException or TimeoutException)
+    {
+        benchmarkResults.Add(new { name = "local P2P identity/loopback", available = false, error = exception.Message });
+        Console.WriteLine($"GNS local P2P loopback: unavailable ({exception.Message})");
+        Console.WriteLine("Provide a native library and the rendezvous/signaling environment required by GNS P2P, then pass --native-path <path>.");
     }
 }
 
@@ -255,6 +367,8 @@ static NetBatch CreateBatch(int count)
 [MemoryPackable] public partial record BenchmarkSnapshot(uint Tick, int Client, int EntityCount);
 [MemoryPackable] public partial record BenchmarkInput(float Dx, float Dy);
 readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Elapsed, long Allocated, string? Fingerprint = null);
+readonly record struct MatrixProfile(int Clients, int Entities, int PayloadBytes, double LossPercent, bool Reconnect);
+readonly record struct MatrixProfileResult(MatrixProfile Profile, int Frames, int CapturedPackets, int DeliveredPackets, int ReplayedLifecycleRecords);
 
 sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
 {
@@ -263,7 +377,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         string scenario = Value(args, "--scenario") ?? "all";
         int clients = Number(args, "--clients", 16), entities = Number(args, "--entities", 1_000), iterations = Number(args, "--iterations", 10_000), payload = Number(args, "--payload-bytes", 128);
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
-        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "saturation" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, saturation, or playfab.");
+        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "p2p" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, p2p, saturation, playfab, or matrix.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
         return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
     }

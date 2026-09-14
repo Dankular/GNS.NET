@@ -33,6 +33,12 @@ public static class GnsNativeConfiguration
             p2p.Validate();
             if (p2p.IceCandidatePolicy is int policy) sink.SetInt32(ESteamNetworkingConfigValue.P2P_Transport_ICE_Enable, policy);
             if (p2p.StunServerList is string stun) sink.SetString(ESteamNetworkingConfigValue.P2P_STUN_ServerList, stun);
+            if (p2p.TurnRelays is { Count: > 0 } relays)
+            {
+                sink.SetString(ESteamNetworkingConfigValue.P2P_TURN_ServerList, string.Join(',', relays.Select(x => x.Url)));
+                sink.SetString(ESteamNetworkingConfigValue.P2P_TURN_UserList, string.Join(',', relays.Select(x => x.Username)));
+                sink.SetString(ESteamNetworkingConfigValue.P2P_TURN_PassList, string.Join(',', relays.Select(x => x.Credential)));
+            }
         }
     }
 }

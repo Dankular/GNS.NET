@@ -22,13 +22,30 @@ public sealed class ConnectionPolicyTests
         var options = new GnsRuntimeOptions
         {
             Impairment = new GnsImpairmentOptions { LossSendPercent = 4, LagReceiveMilliseconds = 17 },
-            P2P = new GnsP2POptions { IceCandidatePolicy = 1, StunServerList = "stun.example.test:3478" }
+            P2P = new GnsP2POptions
+            {
+                IceCandidatePolicy = 1,
+                StunServerList = "stun.example.test:3478",
+                TurnRelays = [new P2PRelayEndpoint("turn:relay.example.test:3478", "expiry:player", "base64-credential", DateTimeOffset.UtcNow.AddMinutes(5))]
+            }
         };
         GnsNativeConfiguration.Apply(options, sink);
         Assert.Equal(4, sink.Integers[ESteamNetworkingConfigValue.FakePacketLoss_Send]);
         Assert.Equal(17, sink.Integers[ESteamNetworkingConfigValue.FakePacketLag_Recv]);
         Assert.Equal(1, sink.Integers[ESteamNetworkingConfigValue.P2P_Transport_ICE_Enable]);
         Assert.Equal("stun.example.test:3478", sink.Strings[ESteamNetworkingConfigValue.P2P_STUN_ServerList]);
+        Assert.Equal("turn:relay.example.test:3478", sink.Strings[ESteamNetworkingConfigValue.P2P_TURN_ServerList]);
+        Assert.Equal("expiry:player", sink.Strings[ESteamNetworkingConfigValue.P2P_TURN_UserList]);
+        Assert.Equal("base64-credential", sink.Strings[ESteamNetworkingConfigValue.P2P_TURN_PassList]);
+    }
+    [Fact]
+    public void P2POptions_RejectExpiredMalformedOrCommaInjectedTurnCredentials()
+    {
+        static P2PRelayEndpoint Relay(string url, string? user, string? credential, DateTimeOffset expiry) => new(url, user, credential, expiry);
+        Assert.Throws<ArgumentException>(() => new GnsP2POptions { TurnRelays = [Relay("udp:relay.example.test", "u", "p", DateTimeOffset.UtcNow.AddMinutes(1))] }.Validate());
+        Assert.Throws<ArgumentException>(() => new GnsP2POptions { TurnRelays = [Relay("turn:relay.example.test", "u", "p", DateTimeOffset.UtcNow.AddMinutes(-1))] }.Validate());
+        Assert.Throws<ArgumentException>(() => new GnsP2POptions { TurnRelays = [Relay("turn:relay.example.test", "u", "p,unsafe", DateTimeOffset.UtcNow.AddMinutes(1))] }.Validate());
+        Assert.Throws<ArgumentException>(() => new GnsP2POptions { TurnRelays = [Relay("turn:relay.example.test", null, "p", DateTimeOffset.UtcNow.AddMinutes(1))] }.Validate());
     }
     [Fact]
     public void TransportPolicy_RejectsUnauthenticatedOrUnencryptedConnections()
@@ -60,6 +77,18 @@ public sealed class ConnectionPolicyTests
         Assert.NotNull(typeof(ISteamNetworkingSockets).GetMethod(nameof(ISteamNetworkingSockets.SetCertificate)));
         Assert.NotNull(typeof(ISteamNetworkingSockets).GetMethod(nameof(ISteamNetworkingSockets.GetCertificateRequest)));
         Assert.NotNull(typeof(ISteamNetworkingSockets).GetMethod(nameof(ISteamNetworkingSockets.GetAuthenticationStatus), new[] { typeof(SteamNetAuthenticationStatus_t).MakeByRefType() }));
+    }
+
+    [Fact]
+    public void NativeConnectionStatistics_ProjectsBindingQualityIntoPacketLoss()
+    {
+        var statistics = new NativeConnectionStatistics(default, 20, .75f, .9f, 0, 0, 0, 0, 0, 0, 0, 0, default, null);
+        Assert.Equal(25d, statistics.LocalPacketLossPercent, 5);
+        Assert.Equal(10d, statistics.RemotePacketLossPercent, 5);
+
+        var invalid = statistics with { LocalQuality = float.NaN, RemoteQuality = float.PositiveInfinity };
+        Assert.Equal(0d, invalid.LocalPacketLossPercent);
+        Assert.Equal(0d, invalid.RemotePacketLossPercent);
     }
 
     [Fact]

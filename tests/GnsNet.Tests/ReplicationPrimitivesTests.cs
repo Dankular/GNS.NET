@@ -64,6 +64,22 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public async Task TraversalTester_ContinuesToRelayAfterDirectProbeFailureAndReportsBothFailures()
+    {
+        P2PTraversalResult fallback = await P2PTraversalTester.TestAsync(
+            _ => throw new InvalidOperationException("blocked"), _ => Task.FromResult(true), TimeSpan.FromSeconds(1));
+        Assert.False(fallback.DirectPath);
+        Assert.True(fallback.RelayPath);
+        Assert.Null(fallback.FailureReason);
+
+        P2PTraversalResult failed = await P2PTraversalTester.TestAsync(
+            _ => throw new InvalidOperationException("direct blocked"), _ => throw new InvalidOperationException("relay blocked"), TimeSpan.FromSeconds(1));
+        Assert.False(failed.RelayPath);
+        Assert.Contains("direct blocked", failed.FailureReason);
+        Assert.Contains("relay blocked", failed.FailureReason);
+    }
+
+    [Fact]
     public void TurnCredentialRotator_ProducesCoturnRestCredentialsWithoutLeakingSecret()
     {
         var rotator = new TurnCredentialRotator([new TurnRelayServer(new Uri("turn:relay.example.test:3478"), "secret")], TimeSpan.FromMinutes(10));
@@ -159,9 +175,9 @@ public sealed class ReplicationPrimitivesTests
         Assert.Empty(history.RaycastSubTickForClient("shooter", now, viewTimes, authorization, _ => 10.5, id => id == 7, 0, 0, 1, 0, 20));
         viewTimes.Record("shooter", now.AddSeconds(-1));
         IReadOnlyList<RewindHit> hits = history.RaycastSubTickForClient("shooter", now, viewTimes, authorization, _ => 10.5, id => id == 7, 0, 0, 1, 0, 20);
-        Assert.Equal(1, hits.Count);
-        Assert.Equal(7, hits[0].EntityId);
-        Assert.Equal((uint)10, hits[0].Tick);
+        RewindHit hit = Assert.Single(hits);
+        Assert.Equal(7, hit.EntityId);
+        Assert.Equal((uint)10, hit.Tick);
     }
 
     [Fact]
@@ -172,6 +188,38 @@ public sealed class ReplicationPrimitivesTests
         viewTimes.Record("expired", now.AddSeconds(-3)); viewTimes.Record("future", now.AddSeconds(1));
         Assert.Empty(history.RaycastSubTickForClient("expired", now, viewTimes, authorization, _ => 10, null, 0, 0, 1, 0, 20));
         Assert.Empty(history.RaycastSubTickForClient("future", now, viewTimes, authorization, _ => 10, null, 0, 0, 1, 0, 20));
+    }
+
+    [Fact]
+    public void AuthoritativeRewindService_ComposesMeasuredViewTimeAndTargetAuthorization()
+    {
+        var service = new AuthoritativeRewindService<string>(
+            time => 10 + (time - DateTimeOffset.UnixEpoch.AddSeconds(10)).TotalSeconds * 10,
+            TimeSpan.FromSeconds(2));
+        DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);
+        service.RecordFrame(10, [new RewindHitbox(7, 5, 0, 1), new RewindHitbox(8, 6, 0, 1)]);
+        service.RecordFrame(11, [new RewindHitbox(7, 7, 0, 1), new RewindHitbox(8, 8, 0, 1)]);
+        service.RecordViewTime("shooter", now.AddMilliseconds(-50));
+
+        IReadOnlyList<RewindHit> hits = service.Raycast("shooter", now, id => id == 7, 0, 0, 1, 0, 20);
+
+        RewindHit hit = Assert.Single(hits);
+        Assert.Equal(7, hit.EntityId);
+        Assert.Equal((uint)10, hit.Tick);
+    }
+
+    [Fact]
+    public void AuthoritativeRewindService_RemovesClientAndRejectsStaleViewTime()
+    {
+        var service = new AuthoritativeRewindService<string>(_ => 10, TimeSpan.FromSeconds(1));
+        DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);
+        service.RecordFrame(10, [new RewindHitbox(7, 5, 0, 1)]);
+        service.RecordViewTime("shooter", now.AddMilliseconds(-500));
+
+        Assert.Single(service.Raycast("shooter", now, null, 0, 0, 1, 0, 20));
+        Assert.True(service.RemoveClient("shooter"));
+        Assert.Empty(service.Raycast("shooter", now, null, 0, 0, 1, 0, 20));
+        Assert.False(service.RemoveClient("shooter"));
     }
 
     [Fact]
@@ -232,6 +280,27 @@ public sealed class ReplicationPrimitivesTests
         NetworkObjectDescriptor stillHidden = registry.Spawn(3, "a", 5);
         Assert.NotEqual(hidden.ObjectId, stillHidden.ObjectId);
         scheduler.Tick(6);
+        Assert.Empty(scheduler.Drain("a", 10));
+    }
+
+    [Fact]
+    public void LifecycleScheduler_DespawnCleansStaleAoiMembershipAndDoesNotEmitDuplicateLeave()
+    {
+        var registry = new NetworkObjectRegistry<string>();
+        var scheduler = new LifecycleReplicationScheduler<string>(registry, 90, change => [(byte)change.Kind, (byte)change.Object.ObjectId]);
+        scheduler.AddClient("a");
+        var visible = new HashSet<long>();
+        scheduler.ConfigureAutomaticVisibility(_ => visible);
+        NetworkObjectDescriptor entity = registry.Spawn(1, "a", 1);
+        visible.Add(entity.ObjectId);
+        scheduler.Tick(2);
+        Assert.Single(scheduler.Drain("a", 10));
+
+        Assert.True(registry.Despawn(entity.ObjectId, "destroyed"));
+        var despawn = Assert.Single(scheduler.Drain("a", 10));
+        Assert.Equal((byte)NetworkObjectChangeKind.Despawned, despawn.Frame.Payload[0]);
+
+        scheduler.Tick(3);
         Assert.Empty(scheduler.Drain("a", 10));
     }
 

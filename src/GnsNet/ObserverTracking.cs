@@ -14,4 +14,10 @@ public sealed class ObserverTracker<TClientId, TEntity> where TClientId : notnul
         foreach (TEntity entity in previous.Except(next).ToArray()) { previous.Remove(entity); this.Left?.Invoke(client, entity); }
     }
     public void Remove(TClientId client) => this.observers.Remove(client);
+
+    /// <summary>Removes an entity from every observer set without emitting a leave transition.</summary>
+    public void Forget(TEntity entity)
+    {
+        foreach (HashSet<TEntity> set in this.observers.Values) set.Remove(entity);
+    }
 }

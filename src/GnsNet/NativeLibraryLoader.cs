@@ -1,5 +1,6 @@
 namespace GnsNet;
 
+using GnsSharp;
 using System.Runtime.InteropServices;
 
 /// <summary>
@@ -9,6 +10,9 @@ using System.Runtime.InteropServices;
 /// </summary>
 public static class NativeLibraryLoader
 {
+    private static readonly object resolverLock = new();
+    private static nint resolvedHandle;
+    private static bool resolverInstalled;
     /// <summary>
     /// Environment variable checked for the native library path when no explicit path is given.
     /// </summary>
@@ -47,7 +51,22 @@ public static class NativeLibraryLoader
 
         try
         {
-            return NativeLibrary.Load(path);
+            nint handle = NativeLibrary.Load(path);
+            lock (resolverLock)
+            {
+                if (resolvedHandle != 0 && resolvedHandle != handle)
+                {
+                    NativeLibrary.Free(handle);
+                    throw new InvalidOperationException("Only one native GameNetworkingSockets library may be loaded per process.");
+                }
+                resolvedHandle = handle;
+                if (!resolverInstalled)
+                {
+                    NativeLibrary.SetDllImportResolver(typeof(ISteamNetworkingSockets).Assembly, ResolveImport);
+                    resolverInstalled = true;
+                }
+            }
+            return handle;
         }
         catch (DllNotFoundException ex)
         {
@@ -59,6 +78,11 @@ public static class NativeLibraryLoader
                 ex);
         }
     }
+
+    private static nint ResolveImport(string libraryName, System.Reflection.Assembly _, DllImportSearchPath? __)
+        => libraryName.Contains("GameNetworkingSockets", StringComparison.OrdinalIgnoreCase) || libraryName.Contains("steamnetworkingsockets", StringComparison.OrdinalIgnoreCase)
+            ? resolvedHandle
+            : 0;
 
     private static string DefaultFileName()
     {

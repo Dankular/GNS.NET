@@ -18,6 +18,22 @@ Raised after a client reaches Connected and passes native security policy.
 
 Raised when a client connection closes, whether by the peer or locally-detected problem.
 
+## `GnsNet.AuthoritativeRewindService`1.Raycast(`0,System.DateTimeOffset,System.Func{System.Int64,System.Boolean},System.Single,System.Single,System.Single,System.Single,System.Single)`
+
+Performs a fractional-tick authoritative ray query for a client. An empty result means the client is unknown, its measured view time is outside the server rewind window, or no target was hit.
+
+## `GnsNet.AuthoritativeRewindService`1.RecordFrame(System.UInt32,System.Collections.Generic.IEnumerable{GnsNet.RewindHitbox})`
+
+Records the authoritative hitboxes for one simulation tick.
+
+## `GnsNet.AuthoritativeRewindService`1.RecordViewTime(`0,System.DateTimeOffset)`
+
+Records a server-measured view time for a connected client/session.
+
+## `GnsNet.AuthoritativeRewindService`1.RemoveClient(`0)`
+
+Removes a disconnected client so its last view time cannot be reused.
+
 ## `GnsNet.AuthoritativeServer`3.Advance`
 
 Applies queued inputs and advances truth by exactly one server tick.
@@ -26,6 +42,10 @@ Applies queued inputs and advances truth by exactly one server tick.
 
 Registers a late joiner and queues its immediate authoritative world transfer.
 
+## `GnsNet.AutomaticSnapshotScheduler`3.ConfigureAutoTick(System.Func{System.Collections.Generic.IEnumerable{`1}},System.Func{`0,`2},System.Func{`0,System.Single},System.Byte,System.Byte,System.Func{`1,System.String},System.Func{`1,System.Collections.Generic.IReadOnlyList{System.Byte[]}})`
+
+Configures automatic ticks with explicit component fingerprints for granular dirty scheduling.
+
 ## `GnsNet.AutomaticSnapshotScheduler`3.ConfigureAutoTick(System.Func{System.Collections.Generic.IEnumerable{`1}},System.Func{`0,`2},System.Func{`0,System.Single},System.Byte,System.Byte,System.Func{`1,System.String})`
 
 Configures automatic ticks with serialized component dirty tracking.
@@ -33,6 +53,10 @@ Configures automatic ticks with serialized component dirty tracking.
 ## `GnsNet.AutomaticSnapshotScheduler`3.ConfigureAutoTick(System.Func{System.Collections.Generic.IEnumerable{`1}},System.Func{`0,`2},System.Func{`0,System.Single},System.Byte,System.Byte)`
 
 Configures the world and transport policy once for caller-free per-tick publication.
+
+## `GnsNet.ComponentDirtyTracker`1.Collect(System.Collections.Generic.IEnumerable{`0},System.Func{`0,System.String},System.Func{`0,System.Collections.Generic.IReadOnlyList{System.Byte[]}})`
+
+Returns entities with at least one changed component fingerprint.
 
 ## `GnsNet.ComponentDirtyTracker`1.Collect(System.Collections.Generic.IEnumerable{`0},System.Func{`0,System.String})`
 
@@ -148,6 +172,14 @@ Performs an authorized shooter rewind with fractional-tick resolution and option
 
 Rewinds and tests a sphere against registered hitboxes.
 
+## `GnsNet.LifecycleReplicationScheduler`1.ConfigureAutomaticVisibility(System.Func{`0,System.Collections.Generic.IEnumerable{System.Int64}})`
+
+System.Xml.XmlElement
+
+## `GnsNet.LifecycleReplicationScheduler`1.Tick(System.UInt32)`
+
+Runs the AOI pass and automatically delivers observer enter/leave lifecycle records.
+
 ## `GnsNet.LifecycleReplicationScheduler`1.UpdateVisibility(`0,System.Collections.Generic.IEnumerable{System.Int64},System.UInt32)`
 
 Updates AOI membership. Enter emits spawn before later state; leave emits despawn.
@@ -159,6 +191,18 @@ Sends an explicit migration command to both live shard processes over their cont
 ## `GnsNet.MovementInputGuard`1.SetAuthoritativePosition(`0,System.ValueTuple{System.Single,System.Single},System.Nullable{System.DateTimeOffset})`
 
 Seeds the last position from authoritative server state.
+
+## `GnsNet.NativeAuthentication.CreateCertificateRequest(GnsSharp.ISteamNetworkingSockets)`
+
+Obtains the native certificate request blob to send to a game coordinator.
+
+## `GnsNet.NativeAuthentication.GetStatus(GnsSharp.ISteamNetworkingSockets,GnsSharp.SteamNetAuthenticationStatus_t@)`
+
+Queries the actual native authentication readiness and diagnostic status.
+
+## `GnsNet.NativeAuthentication.SetCertificate(GnsSharp.ISteamNetworkingSockets,System.ReadOnlySpan{System.Byte})`
+
+Installs a coordinator-issued SteamDatagram certificate on the native socket interface.
 
 ## `GnsNet.NativeConnectionStatistics.#ctor(GnsSharp.ESteamNetworkingConnectionState,System.Int32,System.Single,System.Single,System.Single,System.Single,System.Single,System.Single,System.Int32,System.Int32,System.Int32,System.Int32,GnsSharp.SteamNetworkingMicroseconds,System.String)`
 
@@ -188,6 +232,10 @@ Applies an authoritative lifecycle record idempotently on a reconnecting client.
 
 Replays captured outbound packets through a transport callback and returns successful deliveries.
 
+## `GnsNet.ObserverTracker`2.Forget(`1)`
+
+Removes an entity from every observer set without emitting a leave transition.
+
 ## `GnsNet.P2PTraversalResult.#ctor(System.Boolean,System.Boolean,System.TimeSpan,System.String)`
 
 Deterministic traversal result used by CI and game-server readiness checks.
@@ -203,6 +251,10 @@ Returns the account's entity session, refreshing it from its login ticket when n
 ## `GnsNet.PlayFabRestClient.RegisterServerAsync(System.String,System.String,System.Threading.CancellationToken)`
 
 Registers or retrieves a persistent PlayFab game_server entity for a process.
+
+## `GnsNet.PredictionTickMetadata.#ctor(System.TimeSpan,System.UInt64,System.UInt32)`
+
+Deterministic inputs required to replay one prediction tick.
 
 ## `GnsNet.ProtocolVersion.#ctor(System.Int32,System.Int32,System.Int32)`
 
@@ -232,9 +284,33 @@ Runs simulation ticks with bounded coordinator-driven catch-up and drift-adjuste
 
 System.Xml.XmlElement
 
+## `GnsNet.TurnCredential.#ctor(GnsNet.P2PRelayEndpoint,System.DateTimeOffset)`
+
+A short-lived TURN credential and its relay endpoint.
+
+## `GnsNet.TurnCredentialRotator.Issue(System.String,System.Nullable{System.DateTimeOffset})`
+
+Issues one credential per configured relay, allowing deterministic fallback.
+
+## `GnsNet.TurnCredentialRotator.SelectFallback(System.Collections.Generic.IEnumerable{GnsNet.P2PRelayEndpoint},System.Nullable{System.DateTimeOffset})`
+
+Returns non-expired relays in configured order; callers can try each in order.
+
 ## `GnsNet.ValidatedInputRouter`1.RegisterAuthoritative``2(System.Byte,GnsNet.ServerInputGuard{`0,``1},GnsNet.AuthoritativeServer{`0,``0,``1},System.Action{`0,``1})`
 
 Registers validated input and forwards its network tick into an authoritative server.
+
+## `GnsNet.AuthoritativeRewindService`1.Authorization`
+
+Server-defined maximum age of an accepted rewind request.
+
+## `GnsNet.AuthoritativeRewindService`1.History`
+
+Bounded authoritative hitbox history used by this service.
+
+## `GnsNet.AuthoritativeRewindService`1.ViewTimes`
+
+Measured client view times used to authorize rewind requests.
 
 ## `GnsNet.GnsClient.Connection`
 
@@ -252,6 +328,10 @@ Native GNS ICE candidate policy value; interpretation follows the selected GNS b
 
 Comma-separated STUN server list, or null to retain the native default.
 
+## `GnsNet.GnsP2POptions.TurnRelays`
+
+Short-lived TURN credentials passed to native GNS as aligned server/user/password lists.
+
 ## `GnsNet.GnsRuntimeOptions.CallbackInterval`
 
 System.Xml.XmlElement
@@ -268,6 +348,10 @@ System.Xml.XmlElement
 
 Optional native GNS impairment values for development builds only.
 
+## `GnsNet.GnsRuntimeOptions.NativeCertificate`
+
+Optional coordinator-issued SteamDatagram certificate blob for native GNS authentication.
+
 ## `GnsNet.GnsRuntimeOptions.NativeLibraryPath`
 
 System.Xml.XmlElement
@@ -283,6 +367,14 @@ Connection admission policy. Set before clients are accepted.
 ## `GnsNet.GnsServerHost`1.RequireApplicationAdmission`
 
 Requires a signed application admission token before gameplay frames are dispatched.
+
+## `GnsNet.NativeConnectionStatistics.LocalPacketLossPercent`
+
+Native locally observed packet loss derived from GNS's 0..1 delivery quality.
+
+## `GnsNet.NativeConnectionStatistics.RemotePacketLossPercent`
+
+Native remotely observed packet loss derived from GNS's 0..1 delivery quality.
 
 ## `GnsNet.NetFrame.SchemaVersion`
 
@@ -311,6 +403,10 @@ The message payload.
 ## `GnsNet.AuthenticationGateway`
 
 Converts an externally verified identity into the GNS.NET admission token used by the transport.
+
+## `GnsNet.AuthoritativeRewindService`1`
+
+Composes measured client view times with bounded authoritative hitbox history for server-side shooter queries. The game records authoritative hitboxes each simulation tick and records the view time measured by its transport/replication layer; clients never provide an arbitrary query timestamp to this service.
 
 ## `GnsNet.AuthoritativeServer`3`
 
@@ -604,6 +700,10 @@ Validates a PlayFab client session ticket using the PlayFab Server API.
 
 Composes prediction history, authoritative reconciliation, and render correction for one world.
 
+## `GnsNet.PredictionTickMetadata`
+
+Deterministic inputs required to replay one prediction tick.
+
 ## `GnsNet.PrioritySendQueue`
 
 Orders outgoing frames by relevance and limits work per tick.
@@ -731,6 +831,18 @@ Token-bucket limiter suitable for per-connection message or input budgets.
 ## `GnsNet.TransportSecurityPolicy`
 
 Enforces the native GNS authenticated/encrypted connection contract.
+
+## `GnsNet.TurnCredential`
+
+A short-lived TURN credential and its relay endpoint.
+
+## `GnsNet.TurnCredentialRotator`
+
+Creates coturn TURN REST credentials. The shared secret is used only to derive a short-lived HMAC credential and is never included in the returned endpoint or signaling payload.
+
+## `GnsNet.TurnRelayServer`
+
+Configuration for one coturn server using TURN REST API shared-secret authentication.
 
 ## `GnsNet.ValidatedInputRouter`1`
 

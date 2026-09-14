@@ -5,9 +5,11 @@ name: .NET
 
 on:
   push:
-    branches: [ "claude/gracious-hawking-xnxxt5" ]
+    branches: [ "**" ]
   pull_request:
-    branches: [ "claude/gracious-hawking-xnxxt5" ]
+    branches: [ "**" ]
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       gns_ref:
@@ -48,6 +50,12 @@ jobs:
         dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario replay --iterations 1000 --deterministic --json artifacts/replay-a.json
         dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario replay --iterations 1000 --deterministic --json artifacts/replay-b.json
         test "$(jq -r '.results[0].fingerprint' artifacts/replay-a.json)" = "$(jq -r '.results[0].fingerprint' artifacts/replay-b.json)"
+    - name: Run deterministic managed load matrix
+      run: |
+        mkdir -p artifacts
+        dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario matrix --clients 16 --entities 1000 --iterations 100 --payload-bytes 128 --deterministic --json artifacts/matrix-a.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario matrix --clients 16 --entities 1000 --iterations 100 --payload-bytes 128 --deterministic --json artifacts/matrix-b.json
+        cmp artifacts/matrix-a.json artifacts/matrix-b.json
     - name: Upload replay and load regression artifact
       uses: actions/upload-artifact@v4
       with:
@@ -84,7 +92,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        if grep -RInE --exclude='*.md' '(PLAYFAB_SECRET|STEAM.*KEY|TURN.*SECRET|PASSWORD[[:space:]]*[:=]|API_KEY[[:space:]]*[:=])' .github docker; then
+        if grep -RInE --exclude='*.md' --exclude='dotnet.yml' --exclude='turn.env.example' --exclude='turn-compose.yml' '(PLAYFAB_SECRET|STEAM.*KEY|TURN.*SECRET|PASSWORD[[:space:]]*[:=]|API_KEY[[:space:]]*[:=])' .github docker; then
           echo "Credential-like value found in native CI configuration" >&2
           exit 1
         fi
@@ -147,7 +155,7 @@ jobs:
       with:
         name: gamenetworkingsockets-linux-x64
         path: |
-          native/build-linux/**/libGameNetworkingSockets.so*
+          native/build-linux/**/*.so*
           native/build-linux/gns-artifact.sha256
         if-no-files-found: error
 
@@ -195,8 +203,70 @@ jobs:
       with:
         name: gamenetworkingsockets-windows-x64
         path: |
-          native/build-windows/**/GameNetworkingSockets.dll
+          native/build-windows/**/*.dll
           native/build-windows/gns-artifact.sha256
+        if-no-files-found: error
+
+  native-windows-runtime:
+    needs: native-windows
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Download Windows native artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gamenetworkingsockets-windows-x64
+        path: native-artifacts/windows
+    - name: Build managed Win64 runtime
+      shell: pwsh
+      run: dotnet build GnsNet.sln -c Release -p:GnsNetBackend=Win64
+    - name: Run Windows native loopback smoke
+      shell: pwsh
+      run: |
+        $artifact = Get-ChildItem -Path native-artifacts/windows -Recurse -Filter GameNetworkingSockets.dll | Select-Object -First 1
+        if ($null -eq $artifact) { throw "Downloaded GameNetworkingSockets.dll was not found" }
+        New-Item -ItemType Directory -Force artifacts | Out-Null
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/windows-transport.json
+    - name: Upload Windows runtime smoke result
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnsnet-windows-runtime-smoke
+        path: artifacts/windows-transport.json
+        if-no-files-found: error
+
+  native-linux-runtime:
+    needs: native-linux
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Download Linux native artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gamenetworkingsockets-linux-x64
+        path: native-artifacts/linux
+    - name: Build managed Linux runtime
+      run: dotnet build GnsNet.sln -c Release
+    - name: Run Linux native loopback smoke
+      shell: bash
+      run: |
+        set -euo pipefail
+        artifact="$(find native-artifacts/linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
+        test -n "$artifact"
+        mkdir -p artifacts
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport.json
+    - name: Upload Linux runtime smoke result
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnsnet-linux-runtime-smoke
+        path: artifacts/linux-transport.json
         if-no-files-found: error
 
   native-artifact-consumer:
@@ -227,4 +297,5 @@ jobs:
         file "$windows_artifact" | grep -E 'PE32\+.*x86-64|PE32\+ executable.*AMD64'
         (cd native-artifacts/linux && sha256sum --check "$(find . -name gns-artifact.sha256 -print -quit)")
         (cd native-artifacts/windows && sha256sum --check "$(find . -name gns-artifact.sha256 -print -quit)")
+        test "$(find native-artifacts/windows -type f -name '*.dll' | wc -l)" -ge 1
         echo "Native Linux and Windows artifacts passed identity and architecture validation."

@@ -46,7 +46,9 @@ present but an external/backend limitation remains and is documented.
    connection with tests for reordering, duplication, and wraparound.
 
    Implemented with bounded, expiring heartbeat sequence probes; duplicate/late acknowledgements
-   are ignored and expired probes contribute to `ConnectionMetrics.PacketLossPercent`.
+   are ignored and expired probes contribute to `ConnectionMetrics.PacketLossPercent`. Native GNS
+   quality-derived local/remote loss percentages are also exposed; raw native sequence telemetry
+   is not available through the selected binding.
 
 5. **[x] Persist and replay recorded network traffic**
 
@@ -98,7 +100,7 @@ present but an external/backend limitation remains and is documented.
     ordering, rate limits, custom validation, movement validation, and pre-handler rejection.
 
 11. **[~] ICE/P2P native transport** — `ConnectP2P` and `ListenP2P` use the supported GnsSharp
-    APIs, preserve GNS certificate enforcement, and `GnsP2POptions` wires ICE candidate policy and
-    STUN server configuration. The pinned GnsSharp/GNS documentation warns that its current upstream
-    native commit has broken P2P support; an updated native GNS build is required to validate actual
-    ICE traversal.
+    APIs, preserve GNS certificate enforcement, and `GnsP2POptions` wires ICE candidate policy,
+    STUN discovery, and native TURN server/user/password configuration. A native local P2P
+    capability probe is integrated, but its Win64 attempt timed out without rendezvous/signaling;
+    actual traversal remains unverified until two external peers and a deployed relay are available.

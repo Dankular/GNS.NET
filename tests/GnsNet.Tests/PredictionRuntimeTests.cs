@@ -113,6 +113,104 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void DirtyFieldMaskCodec_PropertyCorpusIsBoundedAndNeverLeaksUnexpectedParserExceptions()
+    {
+        var random = new Random(0x5EED);
+        const int fieldCount = 129;
+        const int schema = 11;
+        var validMask = new DirtyFieldMask(fieldCount);
+        validMask.Set(0); validMask.Set(64); validMask.Set(128);
+        byte[] valid = DirtyFieldMaskCodec.Encode(schema, validMask, field => [(byte)field, (byte)(field ^ 0xA5)]);
+
+        for (int iteration = 0; iteration < 2_000; iteration++)
+        {
+            byte[] candidate = new byte[random.Next(0, valid.Length + 32)];
+            random.NextBytes(candidate);
+            if (iteration % 4 == 0)
+            {
+                candidate = valid.ToArray();
+                int mutations = 1 + random.Next(8);
+                for (int mutation = 0; mutation < mutations; mutation++) candidate[random.Next(candidate.Length)] ^= (byte)(1 << random.Next(8));
+            }
+            else if (iteration % 4 == 1)
+            {
+                candidate = valid[..random.Next(valid.Length)].ToArray();
+            }
+
+            try
+            {
+                (int decodedSchema, DirtyFieldMask mask, IReadOnlyDictionary<int, byte[]> fields) = DirtyFieldMaskCodec.Decode(candidate, schema, fieldCount, maximumFieldBytes: 64);
+                Assert.Equal(schema, decodedSchema);
+                Assert.All(fields, field =>
+                {
+                    Assert.InRange(field.Key, 0, fieldCount - 1);
+                    Assert.True(mask.IsSet(field.Key));
+                    Assert.InRange(field.Value.Length, 0, 64);
+                });
+            }
+            catch (InvalidDataException)
+            {
+                // Malformed candidates are expected to fail closed.
+            }
+        }
+    }
+
+    [Fact]
+    public void DirtyFieldMaskCodec_SeededFuzzRunsAcrossIndependentInputFamilies()
+    {
+        const int fieldCount = 257;
+        const int schema = 19;
+        var validMask = new DirtyFieldMask(fieldCount);
+        validMask.Set(0); validMask.Set(63); validMask.Set(64); validMask.Set(256);
+        byte[] valid = DirtyFieldMaskCodec.Encode(schema, validMask, field => Enumerable.Repeat((byte)field, (field % 17) + 1).ToArray());
+
+        // Fixed seeds make failures reproducible while exercising independent random streams. The
+        // decoder must either produce a bounded, internally consistent result or reject the input
+        // as InvalidDataException; parser implementation exceptions are test failures.
+        foreach (int seed in new[] { 3, 29, 401, 9_973, 65_537 })
+        {
+            var random = new Random(seed);
+            for (int iteration = 0; iteration < 1_000; iteration++)
+            {
+                byte[] candidate = new byte[random.Next(0, valid.Length + 96)];
+                random.NextBytes(candidate);
+                switch (iteration % 5)
+                {
+                    case 0:
+                        candidate = valid.ToArray();
+                        for (int mutation = 0; mutation < 1 + random.Next(12); mutation++)
+                            candidate[random.Next(candidate.Length)] ^= (byte)random.Next(1, 256);
+                        break;
+                    case 1:
+                        candidate = valid[..random.Next(valid.Length)].ToArray();
+                        break;
+                    case 2 when candidate.Length >= 8:
+                        BinaryPrimitives.WriteInt32LittleEndian(candidate, random.Next(-4, 32));
+                        BinaryPrimitives.WriteInt32LittleEndian(candidate.AsSpan(4), random.Next(-4, 512));
+                        break;
+                }
+
+                try
+                {
+                    (int decodedSchema, DirtyFieldMask mask, IReadOnlyDictionary<int, byte[]> fields) = DirtyFieldMaskCodec.Decode(candidate, schema, fieldCount, maximumFieldBytes: 128);
+                    Assert.Equal(schema, decodedSchema);
+                    Assert.InRange(mask.FieldCount, 1, fieldCount);
+                    Assert.All(fields, field =>
+                    {
+                        Assert.InRange(field.Key, 0, fieldCount - 1);
+                        Assert.True(mask.IsSet(field.Key));
+                        Assert.InRange(field.Value.Length, 0, 128);
+                    });
+                }
+                catch (InvalidDataException)
+                {
+                    // Rejection is the expected safe outcome for malformed candidates.
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void Rollback_ReplaysOnlyNewerInputsWithinBoundedHistory()
     {
         var rollback = new RollbackBuffer<int, int>(); rollback.Record(1, 2, 2); rollback.Record(2, 3, 5); rollback.Record(3, 4, 9);

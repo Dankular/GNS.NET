@@ -20,13 +20,12 @@ incomplete relays.
 
 ## GNS.NET boundary
 
-The managed API can configure native ICE and STUN discovery and can carry TURN relay
-credentials through authenticated signaling. The current open-source GnsSharp binding
-does not expose a native API for injecting TURN username/credential pairs into
-`ConnectP2P`; therefore this harness proves a real coturn deployment and credential
-contract, but it cannot claim that the pinned native GNS build will select that TURN
-relay. A public two-peer traversal run must use an updated native GNS build/binding that
-supports the relay credentials, with both peers outside the VPS network.
+The managed API configures native ICE, STUN discovery, and the supported GNS TURN
+server/user/password lists through `GnsP2POptions.TurnRelays`. Credentials are
+validated as short-lived `turn:`/`turns:` values and are never written to logs by
+the framework. A public two-peer traversal run is still required to prove that the
+selected native build and deployed coturn instance establish a relayed path, with
+both peers outside the VPS network.
 
 ## GS integration
 

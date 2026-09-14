@@ -6,6 +6,7 @@ public sealed class LifecycleReplicationScheduler<TClientId> where TClientId : n
     private readonly NetworkObjectRegistry<TClientId> registry;
     private readonly ObserverTracker<TClientId, long> observers = new();
     private readonly Dictionary<TClientId, PrioritySendQueue> queues = new();
+    private readonly Dictionary<long, NetworkObjectDescriptor> descriptors = new();
     private readonly Func<NetworkObjectChange, byte[]> encode;
     private readonly byte opcode;
     private Func<TClientId, IEnumerable<long>>? visibilityProvider;
@@ -38,22 +39,30 @@ public sealed class LifecycleReplicationScheduler<TClientId> where TClientId : n
     private uint currentTick;
     private void OnEntered(TClientId client, long objectId)
     {
-        if (!this.registry.TryGet(objectId, out NetworkObjectDescriptor descriptor)) return;
+        if (!this.TryGetDescriptor(objectId, out NetworkObjectDescriptor descriptor)) return;
         this.queues[client].Enqueue(new NetFrame(this.opcode, this.currentTick, this.encode(new(NetworkObjectChangeKind.Spawned, descriptor))), NetChannel.Event, 1);
     }
     private void OnLeft(TClientId client, long objectId)
     {
-        if (!this.registry.TryGet(objectId, out NetworkObjectDescriptor descriptor)) return;
+        if (!this.TryGetDescriptor(objectId, out NetworkObjectDescriptor descriptor)) return;
         this.queues[client].Enqueue(new NetFrame(this.opcode, this.currentTick, this.encode(new(NetworkObjectChangeKind.Despawned, descriptor, Reason: "left AOI"))), NetChannel.Event, 1);
     }
     private void OnChanged(NetworkObjectChange change)
     {
+        if (change.Kind is NetworkObjectChangeKind.Spawned or NetworkObjectChangeKind.OwnershipTransferred)
+            this.descriptors[change.Object.ObjectId] = change.Object;
         foreach (TClientId client in this.queues.Keys.ToArray())
         {
             bool visible = this.observers.Current(client).Contains(change.Object.ObjectId);
-            if (change.Kind == NetworkObjectChangeKind.Spawned) visible = this.observers.Current(client).Contains(change.Object.ObjectId);
-            if (!visible) continue;
-            this.queues[client].Enqueue(new NetFrame(this.opcode, this.currentTick, this.encode(change)), NetChannel.Event, 1);
+            if (visible) this.queues[client].Enqueue(new NetFrame(this.opcode, this.currentTick, this.encode(change)), NetChannel.Event, 1);
+        }
+        if (change.Kind == NetworkObjectChangeKind.Despawned)
+        {
+            this.observers.Forget(change.Object.ObjectId);
+            this.descriptors.Remove(change.Object.ObjectId);
         }
     }
+
+    private bool TryGetDescriptor(long objectId, out NetworkObjectDescriptor descriptor)
+        => this.registry.TryGet(objectId, out descriptor) || this.descriptors.TryGetValue(objectId, out descriptor);
 }

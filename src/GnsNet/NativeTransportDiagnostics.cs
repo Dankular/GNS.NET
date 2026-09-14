@@ -18,7 +18,17 @@ public readonly record struct NativeConnectionStatistics(
     int PendingReliableBytes,
     int SentUnackedReliableBytes,
     SteamNetworkingMicroseconds QueueTime,
-    string? DetailedStatus);
+    string? DetailedStatus)
+{
+    /// <summary>Native locally observed packet loss derived from GNS's 0..1 delivery quality.</summary>
+    public double LocalPacketLossPercent => QualityToLoss(this.LocalQuality);
+
+    /// <summary>Native remotely observed packet loss derived from GNS's 0..1 delivery quality.</summary>
+    public double RemotePacketLossPercent => QualityToLoss(this.RemoteQuality);
+
+    private static double QualityToLoss(float quality)
+        => float.IsFinite(quality) ? (1d - Math.Clamp(quality, 0f, 1f)) * 100d : 0d;
+}
 
 /// <summary>Per-lane native GNS queue state.</summary>
 public readonly record struct NativeLaneStatistics(

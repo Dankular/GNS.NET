@@ -7,9 +7,15 @@ A reusable authoritative-server networking layer for C# game projects, built on
 This repository started as a single-purpose proof of concept and now provides a reusable framework
 layer in [`GnsNet`](src/GnsNet): MemoryPack framing, authoritative simulation helpers, prediction /
 reconciliation, snapshot interpolation, resumable sessions, authenticated admission, validation,
-AOI/delta/priority snapshot delivery, diagnostics, replay, scaling, and backend/shard coordination.
-High-level frames carry both protocol and MemoryPack schema revisions and reject unsupported revisions
-before deserialization.
+AOI/delta/priority snapshot delivery, diagnostics, replay, scaling, backend/shard coordination,
+native ICE/STUN/TURN configuration, and certificate-aware transport policy. High-level frames carry
+both protocol and MemoryPack schema revisions and reject unsupported revisions before deserialization.
+
+The managed framework is suitable for beginning game integration. It is not a claim that this
+repository alone is production-ready for public-Internet deployment: real two-peer NAT traversal,
+Coturn/VPS operation, Steamworks ticket callbacks, authenticated native CI, public-network matrix
+testing, and the release-operation items listed in [MILESTONES.md](MILESTONES.md) still require
+external systems or platform credentials.
 
 ## Companion GameService
 
@@ -33,6 +39,41 @@ The audited capability roadmap and comparison against Unity Netcode, Photon Fusi
 Mirror, Unreal Iris, Godot, and Valve GNS is in [MILESTONES.md](MILESTONES.md). It distinguishes
 implemented and tested framework behavior from external validation and remaining work.
 
+## Capability status
+
+The following is the current repository audit. “Implemented and verified” means the behavior is
+integrated into the library and covered by automated tests or a checked-in local harness. An
+interface, adapter, configuration surface, or standalone benchmark is not counted as a completed
+production deployment feature.
+
+| Area | Status | Boundary |
+|---|---|---|
+| Framing, schema revisions, validation, auth admission, reconnect grace, room lifecycle, AOI/delta/priority delivery, replay persistence, and managed replication tests | Implemented and verified | Game-specific state, physics, and scene/team/owner predicates remain application-owned. |
+| Prediction, interpolation, deterministic impairment, bounded rewind queries, lifecycle cleanup, and malformed-input corpus testing | Implemented and verified | A complete gameplay shooter integration and broad property-based fuzzing remain open. |
+| Native TURN/STUN configuration and direct-then-relay signaling orchestration | Implemented and verified at the managed/configuration boundary | Actual NAT traversal needs two external peers, public network paths, and a deployed Coturn service. |
+| Linux native loopback and Windows x64 native loopback | Implemented and locally verified | The checked-in insecure smoke paths do not prove authenticated public operation. |
+| Managed connection/room/entity/payload/impairment/reconnect/replay matrix | Implemented and CI-verified | Native full-scale storm, LAN, IPv4/IPv6, NAT-type, symmetric-NAT, relay, and hostile-network coverage remain open. |
+| Heartbeat RTT and managed loss-window accounting | Implemented and tested | Native GNS quality-derived local/remote loss percentages are exposed; raw native sequence-based packet-loss measurement is not available through the selected binding. |
+| Replay capture, persistence, redaction, deterministic playback, and regression fingerprints | Implemented and CI-verified | Full replay/load orchestration across every connection, room, payload, impairment, and reconnect-storm dimension remains open. |
+| Telemetry meters, Grafana dashboard, and renderer-neutral player overlay | Implemented and tested | Broader automated scene/team/owner AOI lifecycle integration and game-specific observability remain application work. |
+| Native certificate-aware transport policy and coordinator certificate installation | Implemented and tested | Trusted certificate provisioning and authenticated native client/server CI still require protected credentials and runners. |
+| Steamworks `BeginAuthSession` ticket callbacks | Not available in the selected backend | The open-source GnsSharp binding does not expose Steamworks ticket callbacks; this requires the Steamworks backend/runtime. |
+| Migration validation and package signing | Implemented as policy/capability tooling | Coordinated data conversion and trusted package certificate provisioning are operational release responsibilities. |
+
+Still-open external or integration work includes: real NAT traversal with two external peers; Coturn
+deployment and VPS validation; Steamworks `BeginAuthSession` callbacks; authenticated native
+client/server CI with real certificates; native Windows runtime execution in hosted CI; LAN,
+IPv4/IPv6, symmetric-NAT, relay, and hostile-network matrices; broader scene/team/owner AOI
+lifecycle tests; full gameplay-level lag compensation; broader property-based fuzzing; native
+heartbeat sequence loss measurement; full replay/load orchestration; coordinated migration/data
+conversion tooling; and trusted package certificate provisioning/signing in CI. These are listed
+explicitly so a successful managed build is not mistaken for completion of those external systems.
+
+The authoritative execution checklist is [TASKS.md](TASKS.md), and the precise external
+limitations are tracked in [TODO.md](TODO.md) and [MILESTONES.md](MILESTONES.md). The project is
+ready for real game integration, but these open boundaries prevent a claim of public-Internet
+production readiness.
+
 ## What's in `GnsNet`
 
 | Type | What it's for |
@@ -46,8 +87,11 @@ implemented and tested framework behavior from external validation and remaining
 | `NativeLibraryLoader` | Resolves and loads the native `GameNetworkingSockets` shared library (explicit path, `GNSNET_NATIVE_LIBRARY_PATH` env var, or platform default next to the executable). |
 | `GnsServerHost` / `GnsClientHost` | Integrated framework hosts for authentication, heartbeats, reconnect/session grace, typed routing, batching, metrics, replay, and channel policy. |
 | `SnapshotPipeline` | Automatic AOI culling, acknowledged delta baselines, relevance priority, batching, and state/event channels. |
+| `LifecycleReplicationScheduler` | Automatic observer enter/leave lifecycle delivery for authoritative spawn, despawn, and ownership records. |
 | `ReliableBackendBus` / `TcpBackendMessageBus` | Authenticated, ordered, retrying server-to-server transport. |
 | `NetworkDebugOverlay` | Renderer-neutral per-connection RTT, loss, packet, and byte diagnostics for in-game overlays. |
+| `HttpP2PSignalingClient` / `P2PTraversalTester` | Authenticated rendezvous-plan exchange and direct-then-relay probe orchestration. |
+| `GnsP2POptions` | Native ICE/STUN settings plus aligned short-lived TURN server/user/password lists. |
 | `FlatFileIdentityVerifier` | Built-in PBKDF2-backed JSON user authentication for local and small deployments. |
 
 The framework leaves game-specific state and physics to the application, but provides the transport
@@ -337,6 +381,9 @@ if (batch.Count > 0) host.SendBatch(connection, batch, NetChannel.State.SendType
 
 Lower relevance values automatically reduce update frequency. `PrioritySendQueue` can be used when
 an application needs to mix event, nearby-state, and distant-state priorities in the same tick.
+For authoritative object lifecycle, `LifecycleReplicationScheduler` refreshes observer membership
+automatically and emits reliable spawn/despawn records in visibility order. Scene, team, owner, and
+occlusion decisions remain application-defined predicates supplied to the AOI provider.
 
 ### Prediction and interpolation without the facade
 
@@ -380,6 +427,11 @@ await recorder.SaveAsync("captures/desync.gnsr");
 var capture = await NetworkRecorder.LoadAsync("captures/desync.gnsr");
 await capture.ReplayTransportAsync(packet => ReplayToTestServer(packet));
 ```
+
+Heartbeat probes carry sequence numbers and monotonic send timestamps. Acknowledgements update a
+smoothed RTT and a bounded loss window; duplicate, late, and still-in-flight probes are not counted
+as loss. Native connection status and queue metrics are available separately through
+`NativeConnectionStatistics`.
 
 ### Backend messaging and sharding
 
@@ -431,7 +483,9 @@ NativeConnectionStatistics native = connection.GetStatistics();
 
 For high-volume snapshots, `ParallelSnapshotEncoder` shares immutable encoded results across
 connections and `SpatialHashInterestManager` supports distance plus scene/team/visibility rules.
-`HitboxRewindHistory` provides bounded authoritative 2D rewind queries. `GnsTelemetry` emits
+`AuthoritativeRewindService<TClientId>` composes measured per-client view time, bounded hitbox
+history, fractional-tick interpolation, and target authorization for authoritative 2D rewind
+queries. `HitboxRewindHistory` remains available for lower-level composition. `GnsTelemetry` emits
 OpenTelemetry-compatible activities and meters for bytes, drops, RTT, and pending reliable data.
 
 Before accepting gameplay messages, negotiate the wire contract and keep RPC replies correlated:
@@ -460,7 +514,23 @@ scheduler.Publish(world, id => BuildSnapshot(id), id => 1f, entityOpcode: 10,
 
 P2P deployments can use `HttpP2PSignalingClient` with a backend-issued bearer token to exchange
 short-lived signals and TURN credentials, then use `P2PTraversalTester` in CI to verify direct and
-relay fallback paths. The signaling service must never expose long-lived TURN secrets to clients.
+relay fallback paths. Pass the returned endpoints as `GnsP2POptions.TurnRelays` to configure the
+native GNS TURN server/user/password lists:
+
+```csharp
+P2PTraversalPlan plan = await signaling.PollAsync(sessionId, peerId);
+var p2p = new GnsP2POptions
+{
+    IceCandidatePolicy = 0x7fffffff,
+    StunServerList = "stun:stun.example.com:3478",
+    TurnRelays = plan.Relays
+};
+p2p.Validate();
+```
+
+The signaling service must never expose long-lived TURN shared secrets to clients. Native config
+injection is implemented and tested, but actual relay selection still needs two external peers and
+a deployed Coturn service.
 
 ## Prerequisites
 
@@ -493,8 +563,8 @@ The selected open-source backend exposes native authenticated transport/certific
 this framework enforces. Steam `BeginAuthSession` ticket callbacks are a Steamworks API flow and
 are not available through this backend. The framework includes `ShardSupervisor` for detecting and
 restarting dead local shard processes; deployment systems may still provide an outer supervisor for
-host-machine failures. The managed P2P/ICE entry points are present, but the pinned GnsSharp/GNS
-native commit documents broken P2P support; use an updated native GNS build to validate traversal.
+host-machine failures. The managed P2P/ICE entry points and native TURN credential configuration
+are present; use two external peers and a deployed relay to validate actual traversal.
 See [`TODO.md`](TODO.md).
 
 ### Native GNS certificates and game join claims
@@ -560,17 +630,24 @@ foreach (ReceivedMessage msg in client.Poll()) { /* ... */ }
 
 ```
 src/GnsNet/            The wrapper library.
+src/GnsNet.Generators/ Source generators for schema and replication metadata.
 samples/Poc/           The original POC, rebuilt on top of GnsNet - a server, a client, and
                         their shared protocol/message definitions.
-tests/GnsNet.Tests/    Unit tests for GnsNet's pure logic (packet framing, tick sequencing).
-                        These don't touch the native library or the network.
+tests/GnsNet.Tests/    Managed unit and integration tests for framing, lifecycle, prediction,
+                        authentication, AOI, replay, backend messaging, and transport policy.
+benchmarks/             JSON-capable serialization, replication, replay, load, and transport probes.
+native/GameNetworkingSockets/
+                        Pinned native source tree used by the Docker/VPS and CI build harnesses.
+docker/                 Coturn and native-runtime verification configurations.
+docs/                   API, integration, compatibility, relay, and operations documentation.
 ```
 
 ## Building and testing
 
 ```powershell
-dotnet build
-dotnet test
+dotnet restore
+dotnet build GnsNet.sln -c Release --no-restore
+dotnet test GnsNet.sln -c Release --no-build
 ```
 
 The benchmark tool can emit CI-friendly JSON alongside its human-readable score:
@@ -579,13 +656,66 @@ The benchmark tool can emit CI-friendly JSON alongside its human-readable score:
 dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario all --json artifacts/gnsnet-benchmark.json
 ```
 
+For coordinated managed load coverage across connections, room readiness, entities, payload sizes,
+impairment, reconnect rehydration, and replay, run the deterministic matrix scenario:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario matrix --clients 32 --entities 5000 --iterations 1000 --payload-bytes 256 --deterministic --json artifacts/matrix.json
+```
+
+This is managed regression coverage; it does not replace public IPv4/IPv6, NAT-type, symmetric-NAT,
+Coturn, or hostile-network testing.
+
+The native Linux harness builds GameNetworkingSockets, runs the managed suite, and executes the
+explicitly insecure local transport smoke test:
+
+```powershell
+docker compose -f docker/docker-compose.native.yml build --pull
+docker compose -f docker/docker-compose.native.yml run --rm gnsnet-native-ci
+```
+
+The harness proves Linux native loading, loopback setup, and managed contracts. It does not prove
+public NAT traversal, Coturn deployment, Steamworks authentication, or a certificate-authenticated
+client/server run. Windows x64 loopback has also been verified locally with the `Win64` backend and
+the built DLL, and CI now publishes the primary library with its native runtime dependencies and
+builds managed Linux and Win64 consumers for the downloaded artifacts. Keep `--insecure` limited
+to local development and isolated loopback validation; hosted authenticated
+execution and public traversal remain unverified.
+
+To attempt local native P2P API wiring with two in-process peers, run the separately gated smoke
+benchmark. Its JSON result explicitly records success or unavailability:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario p2p --insecure --native-path <path-to-GameNetworkingSockets> --iterations 100
+```
+
+An unavailable result means the required rendezvous/signaling path is absent; this is not evidence
+of public NAT traversal or relay operation.
+
 The test suite exercises serialization, framing, prediction/interpolation, validation, session
 resumption, auth, metrics, replay persistence, adaptive load shedding, TCP backend messaging, and
 shard migration without requiring a native GNS server. Running `samples/Poc` end-to-end additionally
 needs the native library described above.
 
+## Release and contribution checks
+
+Before merging a transport or protocol change, run the Release build and full test suite, then
+regenerate the API reference when public XML documentation changes:
+
+```powershell
+dotnet build GnsNet.sln -c Release --no-restore
+dotnet test GnsNet.sln -c Release --no-build
+./scripts/generate-api-reference.ps1
+git diff --check
+```
+
+The hosted workflow runs on every branch push and pull request, repeats the deterministic managed
+matrix and replay fingerprint checks, and performs a scheduled daily verification. Native
+authenticated CI, real Coturn/VPS validation, and public-network matrix runs are intentionally
+not represented as passing merely because the managed workflow succeeds.
+
 ## License
 
 MIT (see [LICENSE](LICENSE)). `GnsNet` depends on GnsSharp (MIT) and, transitively at runtime,
-on the native GameNetworkingSockets library (BSD-3-Clause) or the Steamworks SDK, depending on
-which backend you build against.
+on the native GameNetworkingSockets library (BSD-3-Clause). This repository selects the open-source
+GNS backend; Steamworks SDK integration and `BeginAuthSession` ticket callbacks are not included.

@@ -119,6 +119,70 @@ public sealed class RewindViewTimeRegistry<TClientId> where TClientId : notnull
     public bool Remove(TClientId client) => this.viewTimes.Remove(client);
 }
 
+/// <summary>
+/// Composes measured client view times with bounded authoritative hitbox history for server-side
+/// shooter queries. The game records authoritative hitboxes each simulation tick and records the
+/// view time measured by its transport/replication layer; clients never provide an arbitrary query
+/// timestamp to this service.
+/// </summary>
+/// <typeparam name="TClientId">The server's client/session identifier type.</typeparam>
+public sealed class AuthoritativeRewindService<TClientId> where TClientId : notnull
+{
+    private readonly Func<DateTimeOffset, double> tickForTime;
+
+    public AuthoritativeRewindService(
+        Func<DateTimeOffset, double> tickForTime,
+        TimeSpan maximumRewind,
+        int historyCapacity = 128,
+        int maxHitboxesPerFrame = 4096,
+        int maxRetainedHitboxes = 524_288)
+    {
+        ArgumentNullException.ThrowIfNull(tickForTime);
+        this.tickForTime = tickForTime;
+        this.History = new HitboxRewindHistory(historyCapacity, maxHitboxesPerFrame, maxRetainedHitboxes);
+        this.ViewTimes = new RewindViewTimeRegistry<TClientId>();
+        this.Authorization = new RewindAuthorization(maximumRewind);
+    }
+
+    /// <summary>Bounded authoritative hitbox history used by this service.</summary>
+    public HitboxRewindHistory History { get; }
+
+    /// <summary>Measured client view times used to authorize rewind requests.</summary>
+    public RewindViewTimeRegistry<TClientId> ViewTimes { get; }
+
+    /// <summary>Server-defined maximum age of an accepted rewind request.</summary>
+    public RewindAuthorization Authorization { get; }
+
+    /// <summary>Records the authoritative hitboxes for one simulation tick.</summary>
+    public void RecordFrame(uint tick, IEnumerable<RewindHitbox> hitboxes)
+        => this.History.Record(tick, hitboxes);
+
+    /// <summary>Records a server-measured view time for a connected client/session.</summary>
+    public void RecordViewTime(TClientId client, DateTimeOffset measuredViewTime)
+        => this.ViewTimes.Record(client, measuredViewTime);
+
+    /// <summary>Removes a disconnected client so its last view time cannot be reused.</summary>
+    public bool RemoveClient(TClientId client) => this.ViewTimes.Remove(client);
+
+    /// <summary>
+    /// Performs a fractional-tick authoritative ray query for a client. An empty result means the
+    /// client is unknown, its measured view time is outside the server rewind window, or no target
+    /// was hit.
+    /// </summary>
+    public IReadOnlyList<RewindHit> Raycast(
+        TClientId client,
+        DateTimeOffset serverNow,
+        Func<long, bool>? canTarget,
+        float originX,
+        float originY,
+        float directionX,
+        float directionY,
+        float maxDistance)
+        => this.History.RaycastSubTickForClient(
+            client, serverNow, this.ViewTimes, this.Authorization, this.tickForTime, canTarget,
+            originX, originY, directionX, directionY, maxDistance);
+}
+
 /// <summary>Stores bounded historical hitboxes and performs authoritative 2D ray-circle rewind queries.</summary>
 public sealed class HitboxRewindHistory
 {

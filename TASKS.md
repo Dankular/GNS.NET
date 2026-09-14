@@ -38,9 +38,9 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Integrate byte/message budgets into scheduler.
   - [x] Add queue-age/starvation handling.
   - [x] Expose per-connection shed/drop decisions.
-- [ ] M2.4 Malformed-input property/fuzz suite
+- [x] M2.4 Malformed-input property/fuzz suite
   - [x] Fuzz malformed snapshots and baseline loss.
-  - [x] Exercise schema mismatch, tick wraparound, partial entities, and baseline loss with deterministic property-style corpus tests and bounded rejection assertions.
+  - [x] Exercise schema mismatch, tick wraparound, partial entities, and baseline loss with deterministic corpus tests plus five-seed bounded property/fuzz families and rejection assertions.
 
 ## M3 — Prediction and time
 
@@ -67,15 +67,20 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M4.3 Authoritative shooter rewind integration
   - [x] Bind measured per-client view time to rewind queries.
   - [x] Test hidden-entity and unauthorized-time attacks.
+  - [x] Integrate a server-owned rewind service that records authoritative frames, removes client
+    view state on disconnect, and applies target authorization to fractional-tick queries.
 
 ## M5 — Native and P2P operations
 
 - [ ] M5.1 Network matrix
   - [ ] Test LAN, NAT types, IPv4/IPv6, and symmetric-connect paths.
+  - [~] Add a separately gated local two-peer P2P identity/loopback capability probe; the native
+    attempt is integrated, but local `ConnectP2P` still requires a rendezvous/signaling environment.
   - [ ] Test relay fallback and hostile-network impairment.
 - [~] M5.2 Native transport verification
   - [x] Linux Docker native build and loopback verification.
-  - [ ] Windows native runtime verification.
+  - [x] Windows x64 native runtime and explicit-library-path loopback verification.
+  - [~] Execute the downloaded Linux and Windows native artifacts in hosted CI (workflow integrated; hosted results pending).
   - [ ] Authenticated native CI client/server run.
   - [x] Explicitly gate the development loopback harness behind `--insecure` and publish a no-secrets auth capability report.
 - [ ] M5.3 Native CI artifacts
@@ -95,7 +100,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Add persistent replay index and metadata.
   - [x] Add redaction and deterministic playback environments (deterministic replay fingerprint and CI verification are integrated; isolated environment orchestration remains open).
   - [x] Add CI replay regression captures.
-  - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (CI now runs a high-cardinality smoke profile; a full matrix remains open).
+  - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (a deterministic managed matrix now covers connection/room/entity/payload/impairment/reconnect/replay dimensions; native and full-scale storm coverage remain open).
 - [ ] M6.4 Release compatibility
   - [x] Define compatibility and migration policy.
   - [~] Add migration tooling, package signing, and release smoke tests (manifest validation, opt-in NuGet signing support, and package/consumer smoke are automated; coordinated data conversion and trusted certificate provisioning remain operational responsibilities).

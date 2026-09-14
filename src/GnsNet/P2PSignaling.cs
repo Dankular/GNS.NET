@@ -37,7 +37,20 @@ public static class P2PTraversalTester
     {
         ArgumentNullException.ThrowIfNull(directProbe); ArgumentNullException.ThrowIfNull(relayProbe); if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
         DateTimeOffset start = DateTimeOffset.UtcNow; using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeoutCts.CancelAfter(timeout);
-        bool direct = await directProbe(timeoutCts.Token).ConfigureAwait(false); bool relay = direct || await relayProbe(timeoutCts.Token).ConfigureAwait(false);
-        return new(direct, relay, DateTimeOffset.UtcNow - start, relay ? null : "Direct and relay traversal probes failed.");
+        bool direct = false;
+        string? directFailure = null;
+        try { direct = await directProbe(timeoutCts.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { directFailure = "Direct traversal probe timed out."; }
+        catch (Exception exception) { directFailure = $"Direct traversal probe failed: {exception.Message}"; }
+        bool relay = direct;
+        string? relayFailure = null;
+        if (!direct)
+        {
+            try { relay = await relayProbe(timeoutCts.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { relayFailure = "Relay traversal probe timed out."; }
+            catch (Exception exception) { relayFailure = $"Relay traversal probe failed: {exception.Message}"; }
+        }
+        string? failure = relay ? null : string.Join(" ", new[] { directFailure, relayFailure }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return new(direct, relay, DateTimeOffset.UtcNow - start, relay ? null : string.IsNullOrWhiteSpace(failure) ? "Direct and relay traversal probes failed." : failure);
     }
 }

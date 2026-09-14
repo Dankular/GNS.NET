@@ -67,7 +67,7 @@ Exit criteria: a sample game can create entities, transfer ownership, call an au
 - [x] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; automatic snapshot ticks schedule component changes without per-message caller plumbing.
 - [x] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters; scheduler integration and metrics are covered.
 - [x] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.
-- [~] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets; deterministic malformed corpora and wraparound coverage exist, broader property-based generation remains.
+- [x] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets; deterministic generated/mutated corpus coverage plus five-seed bounded fuzz families and rejection assertions are integrated.
 
 Exit criteria: callers submit authoritative entities/components once; the runtime chooses fields, encodes only relevant changes, emits lifecycle deltas, and reports budget decisions without manual pipeline calls.
 
@@ -86,7 +86,7 @@ Exit criteria: the sample client predicts immediately, rewinds to an authoritati
 - [~] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions; predicates and hidden-entity filtering exist, broader automatic lifecycle integration remains.
 - [x] Add observer enter/leave events and visibility-safe spawn/despawn ordering; the lifecycle scheduler automatically refreshes AOI membership and queues reliable lifecycle delivery.
 - [x] Add a registered historical hitbox/collider representation with bounded retention and memory budgets; retention, eviction, validation, and rejection metrics are tested.
-- [x] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; authorized per-client queries are integrated and tested.
+- [x] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; authorized per-client queries and the server-owned `AuthoritativeRewindService` are integrated and tested.
 - [~] Add security tests proving hidden entities are not serialized and clients cannot select another client’s rewind time; unauthorized view-time rejection is covered, hidden-entity serialization coverage remains.
 
 Exit criteria: a sample shooter can register hitboxes, perform an authoritative rewind query using the shooter’s measured view time, and replicate only valid observers.
@@ -94,10 +94,10 @@ Exit criteria: a sample shooter can register hitboxes, perform an authoritative 
 ### M5 — Transport, P2P, and native operations
 
 - [x] Expose native GNS connection stats, lanes, send queues, and congestion/backpressure state through stable framework metrics.
-- [~] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback; the authenticated adapter/contract exists, but native traversal remains unverified.
+- [~] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback; authenticated signaling and native TURN server/user/password injection are integrated, but native traversal remains unverified.
 - [ ] Add LAN, NAT-type, IPv4/IPv6, symmetric-connect, relay, and hostile-network integration tests.
-- [~] Fix and verify the current native loopback acceptance path; the Linux Docker harness now builds the native runtime and has been verified on the configured VPS, and CI requires an explicit `--insecure` loopback switch with managed auth capability evidence, but Windows/native traversal remain.
-- [~] Cache vcpkg/native dependencies and publish native binaries as CI artifacts; jobs now validate x64 format and SHA-256 identity before and after transfer, but hosted CI publication has not yet executed.
+- [~] Fix and verify the native loopback acceptance path; Linux Docker and Windows x64 explicit-library-path loopback runs are verified, while authenticated native CI and public/native traversal remain.
+- [~] Cache vcpkg/native dependencies and publish native binaries plus required runtime dependencies as CI artifacts; jobs now validate x64 format and SHA-256 identity before and after transfer, but hosted CI publication has not yet executed.
 
 Exit criteria: CI produces supported native artifacts, runs authenticated client/server transport tests, and reports throughput, RTT, loss, connection setup, and P2P traversal results.
 
@@ -107,7 +107,7 @@ Exit criteria: CI produces supported native artifacts, runs authenticated client
 - [x] Add generated API/reference docs and templates for server, client, room, entity, and auth-provider adapters.
 - [x] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay.
 - [~] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures; persistent indexed replay, redaction, deterministic fingerprints, and CI verification exist, while isolated orchestration remains.
-- [~] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output; benchmark JSON output now exists, but native/load-dimension coverage remains.
+- [~] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output; a deterministic managed matrix now covers these dimensions plus replay/rehydration, while native and full-scale storm coverage remain.
 - [~] Add compatibility policy, protocol version negotiation, migration tooling, package signing, and release smoke tests; policy and clean-consumer smoke are integrated, migration conversion and signing remain.
 
 Exit criteria: a new developer can scaffold a server/client, define messages and replicated entities, run a deterministic network test, inspect metrics, and reproduce a captured session from CI.
