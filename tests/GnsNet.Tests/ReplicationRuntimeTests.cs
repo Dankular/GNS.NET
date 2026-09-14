@@ -4,7 +4,7 @@ using GnsNet;
 using Xunit;
 using MemoryPack;
 
-public sealed class ReplicationRuntimeTests
+public sealed partial class ReplicationRuntimeTests
 {
     [MemoryPackable] private partial record RenameCommand(string Name);
     [MemoryPackable] private partial record RenameReply(bool Accepted, string Name);

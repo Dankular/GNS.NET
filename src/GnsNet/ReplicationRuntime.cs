@@ -118,7 +118,7 @@ public sealed class RpcRouter
                 if (command is null) return new RpcResponse(request.RequestId, false, null, "Invalid command payload.");
                 return new RpcResponse(request.RequestId, true, NetSerializer.Serialize(handler(request, command)));
             }
-            catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
+            catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException or MemoryPackSerializationException)
             { return new RpcResponse(request.RequestId, false, null, "Command handler rejected the request."); }
         });
     }
