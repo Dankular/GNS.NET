@@ -221,7 +221,7 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst)
         for (int i = 0; i < options.Clients; i++)
         {
             Stopwatch started = Stopwatch.StartNew();
-            GnsClient client = GnsClient.Connect("127.0.0.1:27991", Math.Max(64, options.Iterations));
+            GnsClient client = GnsClient.Connect(options.Address, Math.Max(64, options.Iterations));
             client.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
             client.Connected += () => { lock (sync) connectTimes.Add(started.Elapsed); connected.Signal(); };
             client.Disconnected += (reason, debug) => Console.Error.WriteLine($"[GNS client disconnect] {reason}: {debug}");
@@ -370,7 +370,7 @@ readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Ela
 readonly record struct MatrixProfile(int Clients, int Entities, int PayloadBytes, double LossPercent, bool Reconnect);
 readonly record struct MatrixProfileResult(MatrixProfile Profile, int Frames, int CapturedPackets, int DeliveredPackets, int ReplayedLifecycleRecords);
 
-sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
+sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, string Address, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -379,7 +379,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
         if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "p2p" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, p2p, saturation, playfab, or matrix.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
-        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
+        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), Value(args, "--address") ?? "127.0.0.1:27991", args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
     }
     private static int Number(string[] args, string name, int fallback) => int.TryParse(Value(args, name), out int value) ? value : fallback;
     private static string? Value(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }

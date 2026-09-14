@@ -253,12 +253,13 @@ jobs:
         $artifact = Get-ChildItem -Path native-artifacts/windows -Recurse -Filter GameNetworkingSockets.dll | Select-Object -First 1
         if ($null -eq $artifact) { throw "Downloaded GameNetworkingSockets.dll was not found" }
         New-Item -ItemType Directory -Force artifacts | Out-Null
-        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/windows-transport.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/windows-transport-ipv4.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --address "[::1]:27991" --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/windows-transport-ipv6.json
     - name: Upload Windows runtime smoke result
       uses: actions/upload-artifact@v4
       with:
         name: gnsnet-windows-runtime-smoke
-        path: artifacts/windows-transport.json
+        path: artifacts/windows-transport-*.json
         if-no-files-found: error
 
   native-linux-runtime:
@@ -285,12 +286,13 @@ jobs:
         artifact="$(find native-artifacts/linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
         test -n "$artifact"
         mkdir -p artifacts
-        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv4.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address '[::1]:27991' --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv6.json
     - name: Upload Linux runtime smoke result
       uses: actions/upload-artifact@v4
       with:
         name: gnsnet-linux-runtime-smoke
-        path: artifacts/linux-transport.json
+        path: artifacts/linux-transport-*.json
         if-no-files-found: error
 
   native-artifact-consumer:
