@@ -47,6 +47,16 @@ validated on 2026-09-14 with Coturn 4.6.3 and the published UDP/TCP 3478 plus UD
 4. The GNS.NET native container was built on the same VPS and its real native loopback harness
    completed 2,000 echoed messages with 0% measured loss.
 
+The repository validator can repeat the deployment check through the existing pinned VPS helper:
+
+```powershell
+./scripts/validate-turn-vps.ps1
+```
+
+It checks the running Coturn image and published ports, performs one authenticated allocation, and
+prints only a pass summary. The shared secret is read and consumed inside the remote shell and is
+never emitted by the validator.
+
 This is deployment and single-host allocation evidence, not the missing two-external-peer proof.
 The VPS check does not close the NAT, symmetric-NAT, hostile-network, or public relayed-path matrix;
 those still require independently networked peers. The existing deployment is also configured
