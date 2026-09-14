@@ -723,6 +723,28 @@ GNS authentication capability. The separate `SteamAuthSessionManager` is the cal
 surface, but it requires the Steamworks GnsSharp backend and Steamworks runtime for an end-to-end
 ticket validation.
 
+When the hosting process supplies an `ISteamUser` implementation, the Steam ticket lifecycle is:
+
+```csharp
+using GnsSharp;
+
+using var steamAuth = new SteamAuthSessionManager();
+steamAuth.ValidationReceived += validation =>
+{
+    if (!validation.Accepted) { /* reject the game-session admission */ return; }
+    // Map validation.SteamId and validation.OwnerSteamId into the GS join-claim policy.
+};
+
+EBeginAuthSessionResult started = steamAuth.BeginAuthSession(ticketBytes, playerSteamId);
+if (started != EBeginAuthSessionResult.OK) { /* reject immediately */ }
+// Keep the manager alive until ValidationReceived; call EndAuthSession(playerSteamId) on leave.
+```
+
+The immediate return value only starts validation; identity acceptance comes from the asynchronous
+`ValidateAuthTicketResponse` callback. This callback manager is integrated and unit-tested, while
+actual Steam account/server validation remains dependent on Steamworks runtime initialization and
+valid platform credentials.
+
 For a reproducible external native runtime, use the checked-in Docker harness described in
 [`docs/native-runtime-container.md`](docs/native-runtime-container.md). It builds GNS and runs the
 managed suite plus the native loopback benchmark in one isolated environment.
