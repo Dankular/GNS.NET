@@ -12,7 +12,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Verify ordering and duplicate suppression during replay.
   - [x] Automatically feed registered host/registry lifecycle events into the session journal.
   - [x] Send a complete initial object graph when the journal retention window is exceeded.
-- [~] M1.2 Complete command/RPC framework
+- [x] M1.2 Complete command/RPC framework
   - [x] Add typed MemoryPack command contracts.
   - [x] Add targeted client routing for server-originated RPC invocations and state delivery.
   - [x] Add request timeout and expiry handling.
@@ -26,15 +26,15 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M2 — Replication protocol
 
-- [~] M2.1 Generated replicated-field encoders
+- [x] M2.1 Generated replicated-field encoders
   - [x] Generate field IDs and stable wire ordering.
   - [x] Generate type-specific property encode/decode methods using dirty masks (custom callback overload remains available for special codecs).
   - [x] Generate schema compatibility metadata.
-- [ ] M2.2 Caller-free automatic replication tick
+- [x] M2.2 Caller-free automatic replication tick
   - [x] Integrate lifecycle records with AOI/delta/batching.
   - [x] Automatically schedule dirty components through per-component fingerprints during snapshot ticks.
   - [x] Select channel and priority without per-message caller plumbing.
-- [ ] M2.3 Automatic budgets and shed accounting
+- [x] M2.3 Automatic budgets and shed accounting
   - [x] Integrate byte/message budgets into scheduler.
   - [x] Add queue-age/starvation handling.
   - [x] Expose per-connection shed/drop decisions.
@@ -44,11 +44,12 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M3 — Prediction and time
 
-- [x] M3.1 Integrated predicted world runtime
+- [~] M3.1 Integrated predicted world runtime
   - [x] Store input/state/simulation metadata per tick.
+  - [ ] Store explicit timestep, deterministic seed, and world-version metadata per tick.
   - [x] Rewind and resimulate a complete sample world.
   - [x] Apply correction smoothing to rendered state.
-- [ ] M3.2 Clock/tick policy integration
+- [x] M3.2 Clock/tick policy integration
   - [x] Apply measured drift to synchronization policy.
   - [x] Integrate bounded catch-up/slow-down into TickLoop.
   - [x] Expose prediction cost and misprediction magnitude.

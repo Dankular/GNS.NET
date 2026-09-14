@@ -63,30 +63,30 @@ Exit criteria: a sample game can create entities, transfer ownership, call an au
 
 ### M2 — Production replication protocol
 
-- [~] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; generated field metadata and compatibility negotiation exist, but generated field encoders remain.
-- [~] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; automatic world publication now exists, but lifecycle records and caller-free tick integration remain.
-- [~] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters; queue/load controls exist but are not fully integrated into automatic snapshot scheduling.
+- [x] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; generated type-specific MemoryPack encoders/decoders, dirty fingerprints, and compatibility metadata are covered.
+- [x] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; automatic snapshot ticks schedule component changes without per-message caller plumbing.
+- [x] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters; scheduler integration and metrics are covered.
 - [x] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.
-- [ ] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets.
+- [~] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets; deterministic malformed corpora and wraparound coverage exist, broader property-based generation remains.
 
 Exit criteria: callers submit authoritative entities/components once; the runtime chooses fields, encodes only relevant changes, emits lifecycle deltas, and reports budget decisions without manual pipeline calls.
 
 ### M3 — Tick-synchronised prediction and time
 
-- [~] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement; offset/jitter and tick rate exist, drift measurement remains.
-- [~] Add client/server tick negotiation and bounded catch-up/slow-down behavior; negotiation/catch-up exists, full loop integration remains.
-- [~] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick; bounded generic rollback exists, full state metadata/runtime integration remains.
-- [~] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation; limits/count/smoothing/extrapolation exist, magnitude calculation remains.
-- [ ] Add tests under artificial latency, jitter, loss, duplicate snapshots, clock drift, and long rollback windows.
+- [~] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement; measured heartbeat timing and drift-adjusted pacing exist, while native heartbeat sequence/loss integration remains an external transport concern.
+- [x] Add client/server tick negotiation and bounded catch-up/slow-down behavior; facade and coordinated tick loop are integrated and tested.
+- [~] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick; integrated rollback exists, but explicit timestep/seed/world-version metadata remains.
+- [x] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation; covered by facade and wraparound tests.
+- [x] Add tests under artificial latency, jitter, loss, duplicate snapshots, clock drift, and long rollback windows.
 
 Exit criteria: the sample client predicts immediately, rewinds to an authoritative tick, replays inputs to present, smooths corrections, and exposes prediction cost/misprediction data.
 
 ### M4 — Visibility and lag-compensated gameplay
 
-- [~] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions; all rule predicates now exist, but visibility-safe lifecycle delivery remains.
-- [~] Add observer enter/leave events and visibility-safe spawn/despawn ordering; observer enter/leave tracking exists, ordering integration remains.
-- [~] Add a registered historical hitbox/collider representation with bounded retention and memory budgets; bounded hitbox history exists, memory budgets remain.
-- [~] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; authorized query clamping/rejection exists, but full per-client integration remains.
+- [~] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions; predicates and hidden-entity filtering exist, broader automatic lifecycle integration remains.
+- [~] Add observer enter/leave events and visibility-safe spawn/despawn ordering; observer tracking and ordering tests exist, automatic scene/team lifecycle wiring remains.
+- [x] Add a registered historical hitbox/collider representation with bounded retention and memory budgets; retention, eviction, validation, and rejection metrics are tested.
+- [x] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; authorized per-client queries are integrated and tested.
 - [~] Add security tests proving hidden entities are not serialized and clients cannot select another client’s rewind time; unauthorized view-time rejection is covered, hidden-entity serialization coverage remains.
 
 Exit criteria: a sample shooter can register hitboxes, perform an authoritative rewind query using the shooter’s measured view time, and replicate only valid observers.
@@ -103,12 +103,12 @@ Exit criteria: CI produces supported native artifacts, runs authenticated client
 
 ### M6 — Developer experience and operations
 
-- [~] Add source generators/analyzers for message IDs, replicated fields, RPC authority, schema versions, and duplicate registrations; message IDs, RPC metadata/registration, schema version, and duplicate IDs exist, replicated-field generation and duplicate endpoint registration remain.
-- [ ] Add generated API/reference docs and templates for server, client, room, entity, and auth-provider adapters.
-- [~] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay; telemetry and overlay data exist, dashboards remain.
-- [~] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures; persistent replay and CI smoke coverage exist, indexing/redaction remain.
+- [x] Add source generators/analyzers for message IDs, replicated fields, RPC authority, schema versions, and duplicate registrations; generated IDs, field codecs, RPC metadata, and schema compatibility are integrated and tested.
+- [x] Add generated API/reference docs and templates for server, client, room, entity, and auth-provider adapters.
+- [x] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay.
+- [~] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures; persistent indexed replay, redaction, deterministic fingerprints, and CI verification exist, while isolated orchestration remains.
 - [~] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output; benchmark JSON output now exists, but native/load-dimension coverage remains.
-- [ ] Add compatibility policy, protocol version negotiation, migration tooling, package signing, and release smoke tests.
+- [~] Add compatibility policy, protocol version negotiation, migration tooling, package signing, and release smoke tests; policy and clean-consumer smoke are integrated, migration conversion and signing remain.
 
 Exit criteria: a new developer can scaffold a server/client, define messages and replicated entities, run a deterministic network test, inspect metrics, and reproduce a captured session from CI.
 
