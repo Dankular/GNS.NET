@@ -3,6 +3,8 @@ namespace GnsNet.Tests;
 using GnsNet;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 public sealed class ReplicationPrimitivesTests
@@ -59,6 +61,29 @@ public sealed class ReplicationPrimitivesTests
     {
         P2PTraversalResult result = await P2PTraversalTester.TestAsync(_ => Task.FromResult(false), _ => Task.FromResult(true), TimeSpan.FromSeconds(1));
         Assert.False(result.DirectPath); Assert.True(result.RelayPath); Assert.Null(result.FailureReason);
+    }
+
+    [Fact]
+    public void TurnCredentialRotator_ProducesCoturnRestCredentialsWithoutLeakingSecret()
+    {
+        var rotator = new TurnCredentialRotator([new TurnRelayServer(new Uri("turn:relay.example.test:3478"), "secret")], TimeSpan.FromMinutes(10));
+        IReadOnlyList<TurnCredential> credentials = rotator.Issue("player", DateTimeOffset.FromUnixTimeSeconds(1_700_000_000));
+        TurnCredential credential = Assert.Single(credentials); Assert.Equal("1700000600:player", credential.Endpoint.Username);
+        byte[] expected = HMACSHA1.HashData(Encoding.UTF8.GetBytes("secret"), Encoding.UTF8.GetBytes("1700000600:player"));
+        Assert.Equal(Convert.ToBase64String(expected), credential.Endpoint.Credential); Assert.DoesNotContain("secret", credential.Endpoint.Url);
+    }
+
+    [Fact]
+    public void TurnCredentialRotator_SelectsUnexpiredFallbackRelaysAndRotates()
+    {
+        var rotator = new TurnCredentialRotator([
+            new TurnRelayServer(new Uri("turn:first.example.test:3478"), "a"),
+            new TurnRelayServer(new Uri("turn:second.example.test:3478"), "b")]);
+        DateTimeOffset now = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000); IReadOnlyList<TurnCredential> first = rotator.Issue("p", now);
+        var relays = first.Select(x => x.Endpoint).ToArray(); relays[0] = relays[0] with { ExpiresAt = now.AddSeconds(-1) };
+        Assert.Equal("turn:second.example.test:3478", Assert.Single(TurnCredentialRotator.SelectFallback(relays, now)).Url);
+        Assert.NotEqual(first[0].Endpoint.Credential, rotator.Issue("p", now.AddMinutes(1))[0].Endpoint.Credential);
+        Assert.Throws<ArgumentException>(() => rotator.Issue("bad:user", now));
     }
 
     [Fact]

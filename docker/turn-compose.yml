@@ -1,0 +1,22 @@
+services:
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=$${TURN_SHARED_SECRET}
+      - --realm=$${TURN_REALM:-gnsnet}
+      - --external-ip=$${TURN_EXTERNAL_IP}
+      - --min-port=49152
+      - --max-port=49252
+      - --log-file=stdout
+    environment:
+      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:?set TURN_SHARED_SECRET in the VPS environment}
+      TURN_REALM: ${TURN_REALM:-gnsnet}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:?set TURN_EXTERNAL_IP to the VPS public IP}
