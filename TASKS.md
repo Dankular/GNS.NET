@@ -87,7 +87,7 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Add OpenTelemetry dashboards.
   - [ ] Add player-facing overlay integration.
 - [ ] M6.3 Replay and load testing
-  - [ ] Add persistent replay index and metadata.
+  - [x] Add persistent replay index and metadata.
   - [~] Add redaction and deterministic playback environments (redaction and deterministic playback are integrated; isolated environment orchestration remains open).
   - [ ] Add CI replay regression captures.
   - [ ] Add connection, room, entity, payload, impairment, and reconnect-storm ramps.

@@ -193,6 +193,19 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public async Task NetworkReplayIndex_PersistsCaptureMetadata()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"gnsnet-index-{Guid.NewGuid():N}.json");
+        try
+        {
+            var recorder = new NetworkRecorder(); DateTimeOffset first = DateTimeOffset.UtcNow; recorder.Record(true, [1, 2], first, "c"); recorder.Record(false, [3], first.AddSeconds(1), "c");
+            var index = new NetworkReplayIndex(); NetworkReplayIndexEntry entry = index.Add("capture.replay", recorder); await index.SaveAsync(path);
+            NetworkReplayIndex loaded = await NetworkReplayIndex.LoadAsync(path); Assert.Equal(entry, Assert.Single(loaded.Entries)); Assert.Equal(3, entry.ByteCount);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
     public void PrioritySendQueue_ShedsFramesAtConfiguredBudgetAndAccountsBytes()
     {
         var queue = new PrioritySendQueue(maxFrames: 1, maxBytes: 64); var first = new NetFrame(1, 1, new byte[8]); var second = new NetFrame(2, 1, new byte[8]);
