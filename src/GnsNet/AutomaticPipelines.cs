@@ -2,6 +2,35 @@ namespace GnsNet;
 
 using MemoryPack;
 
+/// <summary>Tracks serialized component state and returns only entities whose state changed since the last tick.</summary>
+public sealed class ComponentDirtyTracker<TEntity> where TEntity : IMemoryPackable<TEntity>
+{
+    private readonly Dictionary<string, byte[]> fingerprints = new(StringComparer.Ordinal);
+    public int TrackedCount => this.fingerprints.Count;
+    public int LastChangedCount { get; private set; }
+
+    /// <summary>Returns all entities on their first observation and changed entities thereafter.</summary>
+    public IReadOnlyList<TEntity> Collect(IEnumerable<TEntity> entities, Func<TEntity, string> keySelector)
+    {
+        ArgumentNullException.ThrowIfNull(entities); ArgumentNullException.ThrowIfNull(keySelector);
+        var currentKeys = new HashSet<string>(StringComparer.Ordinal);
+        var changed = new List<TEntity>();
+        foreach (TEntity entity in entities)
+        {
+            string key = keySelector(entity) ?? throw new InvalidDataException("Dirty-tracked entity key cannot be null.");
+            if (!currentKeys.Add(key)) throw new InvalidOperationException($"Duplicate dirty-tracked entity key '{key}'.");
+            byte[] fingerprint = NetSerializer.Serialize(entity);
+            if (!this.fingerprints.TryGetValue(key, out byte[]? previous) || !fingerprint.AsSpan().SequenceEqual(previous)) changed.Add(entity);
+            this.fingerprints[key] = fingerprint;
+        }
+        foreach (string key in this.fingerprints.Keys.Where(key => !currentKeys.Contains(key)).ToArray()) this.fingerprints.Remove(key);
+        this.LastChangedCount = changed.Count;
+        return changed;
+    }
+
+    public void Clear() { this.fingerprints.Clear(); this.LastChangedCount = 0; }
+}
+
 /// <summary>Mandatory per-client snapshot pipeline: AOI, delta baseline, priority, batching, channel.</summary>
 public sealed class SnapshotPipeline<TClientId, TEntity, TSnapshot> where TClientId : notnull where TEntity : IMemoryPackable<TEntity> where TSnapshot : IMemoryPackable<TSnapshot>
 {
@@ -45,6 +74,8 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
     private Func<IEnumerable<TEntity>>? worldProvider;
     private Func<TClientId, TSnapshot>? snapshotProvider;
     private Func<TClientId, float>? relevanceProvider;
+    private ComponentDirtyTracker<TEntity>? dirtyTracker;
+    private Func<TEntity, string>? dirtyKeySelector;
     private byte entityOpcode;
     private byte snapshotOpcode;
     public AutomaticSnapshotScheduler(SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline) => this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
@@ -61,10 +92,18 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
         this.worldProvider = world ?? throw new ArgumentNullException(nameof(world)); this.snapshotProvider = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         this.relevanceProvider = relevance ?? throw new ArgumentNullException(nameof(relevance)); this.entityOpcode = entityOpcode; this.snapshotOpcode = snapshotOpcode;
     }
+    /// <summary>Configures automatic ticks with serialized component dirty tracking.</summary>
+    public void ConfigureAutoTick(Func<IEnumerable<TEntity>> world, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode, Func<TEntity, string> entityKey)
+    {
+        this.ConfigureAutoTick(world, snapshot, relevance, entityOpcode, snapshotOpcode);
+        this.dirtyTracker = new ComponentDirtyTracker<TEntity>(); this.dirtyKeySelector = entityKey ?? throw new ArgumentNullException(nameof(entityKey));
+    }
     public void Tick(uint tick)
     {
         if (this.worldProvider is null || this.snapshotProvider is null || this.relevanceProvider is null) throw new InvalidOperationException("Automatic tick is not configured.");
-        this.Publish(this.worldProvider(), this.snapshotProvider, this.relevanceProvider, this.entityOpcode, this.snapshotOpcode, tick);
+        IEnumerable<TEntity> world = this.worldProvider();
+        IReadOnlyList<TEntity> entities = this.dirtyTracker is null ? world.ToArray() : this.dirtyTracker.Collect(world, this.dirtyKeySelector!);
+        this.Publish(entities, this.snapshotProvider, this.relevanceProvider, this.entityOpcode, this.snapshotOpcode, tick);
     }
     public void PublishLifecycle(IEnumerable<NetworkObjectChange> changes, byte opcode, uint tick, Func<NetworkObjectChange, byte[]> encoder, float relevance = 1f)
     {

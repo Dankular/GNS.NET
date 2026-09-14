@@ -154,6 +154,30 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void AutomaticSnapshotScheduler_DirtyTrackingSkipsUnchangedEntitiesAndSendsChanges()
+    {
+        var interest = new InterestManager<string, TestEntity>(); interest.SetView("a", new InterestPoint(0, 0, 100));
+        var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(interest, new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));
+        var scheduler = new AutomaticSnapshotScheduler<string, TestEntity, TestState>(pipeline); scheduler.AddClient("a");
+        TestEntity entity = new() { X = 1, Y = 2 };
+        scheduler.ConfigureAutoTick(() => new[] { entity }, _ => new TestState { Value = 8 }, _ => 1, 4, 5, current => $"{current.X}:{current.Y}");
+        scheduler.Tick(1); Assert.Equal(2, scheduler.Drain("a", 8).Count);
+        scheduler.Tick(2); Assert.Single(scheduler.Drain("a", 8));
+        entity.X = 9; scheduler.Tick(3); var frames = scheduler.Drain("a", 8);
+        Assert.Equal(2, frames.Count); Assert.Equal(9, NetSerializer.Deserialize<TestEntity>(frames.Single(x => x.Frame.Opcode == 4).Frame.Payload)!.X);
+    }
+
+    [Fact]
+    public void ComponentDirtyTracker_RejectsDuplicateKeysAndPrunesRemovedEntities()
+    {
+        var tracker = new ComponentDirtyTracker<TestEntity>();
+        Assert.Equal(2, tracker.Collect(new[] { new TestEntity { X = 1 }, new TestEntity { X = 2 } }, entity => entity.X.ToString()).Count);
+        Assert.DoesNotContain(tracker.Collect(new[] { new TestEntity { X = 1 } }, entity => entity.X.ToString()), entity => entity.X == 2);
+        Assert.Throws<InvalidOperationException>(() => tracker.Collect(new[] { new TestEntity { X = 1 }, new TestEntity { X = 1 } }, entity => entity.X.ToString()));
+        Assert.Equal(1, tracker.TrackedCount);
+    }
+
+    [Fact]
     public void AutomaticSnapshotScheduler_BatchesLifecycleRecordsOnReliableChannel()
     {
         var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(new InterestManager<string, TestEntity>(), new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));
