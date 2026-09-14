@@ -16,7 +16,7 @@ if (options.Scenario is "all" or "batch") Run("NetBatch encode + decode", option
 if (options.Scenario is "all" or "pipeline") Run("AOI + delta + priority snapshot pipeline", options, BenchmarkPipeline);
 if (options.Scenario is "all" or "prediction") Run("client prediction reconciliation", options, BenchmarkPrediction);
 if (options.Scenario is "all" or "replay") Run("persisted capture replay", options, BenchmarkReplay);
-if (options.JsonPath is not null)
+if (options.JsonPath is not null && options.Scenario is not "saturation")
 {
     File.WriteAllText(options.JsonPath, System.Text.Json.JsonSerializer.Serialize(new { generatedAt = DateTimeOffset.UtcNow, scenario = options.Scenario, clients = options.Clients, entities = options.Entities, iterations = options.Iterations, results = benchmarkResults }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     Console.WriteLine($"Benchmark JSON: {options.JsonPath}");
