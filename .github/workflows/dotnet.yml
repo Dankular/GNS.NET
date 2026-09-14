@@ -15,11 +15,11 @@ on:
       gns_ref:
         description: "Pinned GameNetworkingSockets commit, tag, or branch"
         required: false
-        default: "master"
+        default: "a424b7db649438acafb60c99cae6667587c42732"
         type: string
 
 env:
-  GNS_REF: ${{ inputs.gns_ref || 'master' }}
+  GNS_REF: ${{ inputs.gns_ref || 'a424b7db649438acafb60c99cae6667587c42732' }}
 
 jobs:
   build:
