@@ -21,6 +21,11 @@ The `transport` scenario starts a real local GNS listener and clients, then meas
 dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario transport --clients 32 --iterations 10000 --payload-bytes 256 --native-path C:\path\to\GameNetworkingSockets.dll
 ```
 
+The listener binds `[::]:27991` and the client defaults to IPv4 `127.0.0.1:27991`. Select the
+client address explicitly with `--address [::1]:27991` to exercise the IPv6 loopback path; the
+hosted native runtime jobs run both address families. This is dual-stack LAN coverage, not a NAT,
+relay, or public-network traversal test.
+
 Without a native GNS library the tool reports transport capacity as unavailable; application-layer scenarios remain runnable.
 
 The `p2p` scenario attempts a local `ListenP2P` socket, obtains the native identity, connects a
