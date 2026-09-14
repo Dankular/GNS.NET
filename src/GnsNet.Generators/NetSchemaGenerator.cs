@@ -35,13 +35,20 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
             if (!schema && !message && !rpc) return;
             if (!type.Modifiers.Any(x => x.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword))) { production.ReportDiagnostic(Diagnostic.Create(MustBePartial, type.Identifier.GetLocation(), type.Identifier.Text)); return; }
             string ns = GetNamespace(type); string name = type.Identifier.Text; uint id = Hash(name);
-            var members = new StringBuilder(); if (schema) members.AppendLine("    public const int GeneratedNetworkSchemaVersion = 1;");
+            var members = new StringBuilder();
+            if (schema)
+            {
+                AttributeSyntax schemaAttribute = type.AttributeLists.SelectMany(x => x.Attributes).First(x => x.Name.ToString().EndsWith("GenerateNetSchema", StringComparison.Ordinal));
+                string version = schemaAttribute.ArgumentList?.Arguments.FirstOrDefault()?.Expression.ToString() ?? "1";
+                members.AppendLine($"    public const int GeneratedNetworkSchemaVersion = {version};");
+            }
             if (message)
             {
                 members.AppendLine($"    public const ushort GeneratedNetworkMessageId = {id % 65535 + 1};");
-                PropertyDeclarationSyntax[] fields = type.Members.OfType<PropertyDeclarationSyntax>().ToArray();
+                PropertyDeclarationSyntax[] fields = type.Members.OfType<PropertyDeclarationSyntax>().OrderBy(x => x.Identifier.Text, StringComparer.Ordinal).ToArray();
                 members.AppendLine($"    public const int GeneratedNetworkFieldCount = {fields.Length};");
                 members.AppendLine($"    public static readonly string[] GeneratedNetworkFieldNames = new string[] {{ {string.Join(", ", fields.Select(x => "\"" + x.Identifier.Text + "\""))} }};");
+                members.AppendLine($"    public static readonly uint[] GeneratedNetworkFieldIds = new uint[] {{ {string.Join(", ", fields.Select(x => Hash(x.Identifier.Text).ToString() + "u"))} }};");
             }
             if (rpc)
             {

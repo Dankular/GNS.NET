@@ -24,10 +24,10 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M2 — Replication protocol
 
-- [ ] M2.1 Generated replicated-field encoders
-  - [ ] Generate field IDs and stable wire ordering.
+- [~] M2.1 Generated replicated-field encoders
+  - [x] Generate field IDs and stable wire ordering.
   - [ ] Generate encode/decode methods using dirty masks.
-  - [ ] Generate schema compatibility metadata.
+  - [x] Generate schema compatibility metadata.
 - [ ] M2.2 Caller-free automatic replication tick
   - [ ] Integrate lifecycle records with AOI/delta/batching.
   - [ ] Automatically schedule dirty components.
