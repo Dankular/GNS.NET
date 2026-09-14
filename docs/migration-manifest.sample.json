@@ -1,0 +1,7 @@
+{
+  "protocolMajor": 1,
+  "protocolMinor": 0,
+  "schema": 1,
+  "replaySchema": 1,
+  "nativeBackend": "Posix64"
+}

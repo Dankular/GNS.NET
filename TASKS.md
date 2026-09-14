@@ -46,7 +46,7 @@ means a supported partial implementation or an external validation dependency; `
 
 - [~] M3.1 Integrated predicted world runtime
   - [x] Store input/state/simulation metadata per tick.
-  - [ ] Store explicit timestep, deterministic seed, and world-version metadata per tick.
+  - [x] Store explicit timestep, deterministic seed, and world-version metadata per tick.
   - [x] Rewind and resimulate a complete sample world.
   - [x] Apply correction smoothing to rendered state.
 - [x] M3.2 Clock/tick policy integration

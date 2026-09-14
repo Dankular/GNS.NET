@@ -28,3 +28,25 @@ Run the clean-consumer check from the repository root before publishing:
 It restores the solution, packs `GnsNet`, verifies the README and managed assembly are in the `.nupkg`,
 then creates a fresh `net9.0` consumer and restores/builds it from the local package. The same check runs
 for `v*` tags and manual dispatch through `.github/workflows/release-smoke.yml`.
+
+## Migration validation and package signing
+
+Validate a candidate release against the currently deployed manifest before rollout:
+
+```powershell
+./scripts/validate-migration.ps1 -CurrentManifest .\current-release.json -CandidateManifest .\candidate-release.json
+```
+
+The validator rejects protocol-major changes, schema changes, and backwards minor/replay-schema changes
+with exit code `2`. `-AllowBreaking` is an explicit override for a planned coordinated migration and is
+reported in the JSON result. A sample manifest is provided at `docs/migration-manifest.sample.json`.
+
+Package signing uses the SDK's standard NuGet signer and is opt-in:
+
+```powershell
+./scripts/sign-package.ps1 -PackagePath .\artifacts\GnsNet.0.1.0.nupkg -CertificatePath .\release-signing.pfx
+```
+
+Without `-CertificatePath`, the command only reports whether the installed SDK supports signing and never
+modifies the package. `.github/workflows/package-signing.yml` runs this capability check without secrets;
+trusted production signing requires an operator-provided certificate on a protected runner.

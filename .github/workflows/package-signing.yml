@@ -1,0 +1,27 @@
+name: Package signing capability
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Pack unsigned release candidate
+        run: dotnet pack src/GnsNet/GnsNet.csproj --configuration Release --output artifacts/package -p:GnsNetBackend=Posix64
+      - name: Report signing capability without secrets
+        shell: pwsh
+        run: ./scripts/sign-package.ps1 -PackagePath (Get-ChildItem artifacts/package/GnsNet.*.nupkg | Select-Object -First 1).FullName -CapabilityOutput artifacts/signing-capability.json
+      - name: Upload package and capability result
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnsnet-package-signing-capability
+          path: artifacts/
+          if-no-files-found: error
