@@ -14,7 +14,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Send a complete initial object graph when the journal retention window is exceeded.
 - [~] M1.2 Complete command/RPC framework
   - [x] Add typed MemoryPack command contracts.
-  - [ ] Add targeted client routing.
+  - [x] Add targeted client routing.
   - [x] Add request timeout and expiry handling.
   - [x] Add endpoint capability discovery.
 - [ ] M1.3 Room/scene lifecycle integration

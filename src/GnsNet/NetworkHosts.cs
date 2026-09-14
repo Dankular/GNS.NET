@@ -200,6 +200,12 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     public EResult Send<T>(GnsConnection connection, byte opcode, uint tick, T message, ESteamNetworkingSendType sendType)
         where T : IMemoryPackable<T>
     { byte[] data = new NetFrame(opcode, tick, NetSerializer.Serialize(message)).Encode(); EResult result = this.server.Send(connection, data, sendType); this.RecordOutbound(connection, data, sendType, result == EResult.OK); return result; }
+    /// <summary>Routes a serialized message to the currently attached connection for a session.</summary>
+    public EResult SendTo<T>(TSessionId session, byte opcode, uint tick, T message, ESteamNetworkingSendType sendType)
+        where T : IMemoryPackable<T>
+        => this.Sessions.TryGet(session, out GnsConnection? connection) && connection is not null
+            ? this.Send(connection, opcode, tick, message, sendType)
+            : EResult.InvalidParam;
     private void RecordOutbound(GnsConnection connection, byte[] data, ESteamNetworkingSendType sendType, bool delivered)
     { this.Metrics.RecordOut(data.Length, delivered); this.MetricsByConnection.GetOrAdd(connection.Handle.Handle, _ => new()).RecordOut(data.Length, delivered); if (delivered) GnsTelemetry.RecordOutbound(data.Length, connection.Handle.Handle.ToString()); else GnsTelemetry.RecordDrop(connection.Handle.Handle.ToString()); this.Recorder?.Record(true, data, connectionId: connection.Handle.Handle.ToString(), channel: sendType == ESteamNetworkingSendType.Reliable ? NetChannel.Event : NetChannel.State); }
     public void Broadcast<T>(byte opcode, uint tick, T message, ESteamNetworkingSendType sendType)

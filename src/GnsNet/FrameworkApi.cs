@@ -51,6 +51,7 @@ public sealed class GnsAuthoritativeServer<TSessionId, TState, TInput> where TSe
     public EResult SendState(TSessionId session) => this.Host.Sessions.TryGet(session, out GnsConnection? connection) && connection is not null
         ? this.Host.Send(connection, this.options.StateOpcode, this.Tick, this.State, NetChannel.State.SendType())
         : EResult.InvalidParam;
+    public EResult SendStateTo(TSessionId session) => this.Host.SendTo(session, this.options.StateOpcode, this.Tick, this.State, NetChannel.State.SendType());
 }
 
 /// <summary>

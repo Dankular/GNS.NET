@@ -142,6 +142,15 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void SessionRegistry_ResolvesOnlyTheCurrentlyAttachedTarget()
+    {
+        var registry = new ServerSessionRegistry<string>(TimeSpan.FromMinutes(1)); var connection = new GnsConnection(default);
+        registry.Attach("target", connection);
+        Assert.True(registry.TryGet("target", out GnsConnection? resolved)); Assert.Same(connection, resolved);
+        registry.Detach("target"); Assert.False(registry.TryGet("target", out _));
+    }
+
+    [Fact]
     public void SessionRehydration_ReplaysOrderedLifecycleIdempotentlyAndClearsOnGracefulRemoval()
     {
         var sessions = new ServerSessionRegistry<string>(TimeSpan.FromMinutes(1)); var server = new NetworkObjectRegistry<string>(); var client = new NetworkObjectRegistry<string>();
