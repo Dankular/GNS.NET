@@ -42,6 +42,49 @@ public sealed partial class StateSyncTests
     }
 
     [Fact]
+    public void FrameAndBatch_RandomizedPropertiesRoundTripOrRejectOnlyAsInvalidData()
+    {
+        foreach (int seed in new[] { 7, 31, 997, 65_537 })
+        {
+            var random = new Random(seed);
+            for (int iteration = 0; iteration < 750; iteration++)
+            {
+                int count = random.Next(1, 8);
+                var batch = new NetBatch();
+                var expected = new List<NetFrame>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    byte[] payload = new byte[random.Next(0, 512)]; random.NextBytes(payload);
+                    var frame = new NetFrame((byte)random.Next(0, 256), unchecked((uint)random.NextInt64()), payload);
+                    expected.Add(frame); batch.Add(frame);
+                }
+
+                byte[] encoded = batch.Encode();
+                IReadOnlyList<NetFrame> decoded = NetBatch.Decode(encoded);
+                Assert.Equal(expected.Count, decoded.Count);
+                for (int i = 0; i < expected.Count; i++)
+                {
+                    Assert.Equal(expected[i].Opcode, decoded[i].Opcode);
+                    Assert.Equal(expected[i].Tick, decoded[i].Tick);
+                    Assert.Equal(expected[i].Payload, decoded[i].Payload);
+                }
+
+                byte[] mutation = encoded.ToArray();
+                mutation[random.Next(mutation.Length)] ^= (byte)random.Next(1, 256);
+                try
+                {
+                    IReadOnlyList<NetFrame> mutated = NetBatch.Decode(mutation);
+                    Assert.All(mutated, frame => Assert.InRange(frame.Payload.Length, 0, NetFrame.MaxPayloadBytes));
+                }
+                catch (InvalidDataException)
+                {
+                    // Random mutations may be rejected, but parser failures must be normalized.
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void TypedRouter_RejectsCorruptSerializedPayload()
     {
         var router = new NetMessageRouter(); int calls = 0; router.Register<RouterState>(7, (_, _) => calls++);
