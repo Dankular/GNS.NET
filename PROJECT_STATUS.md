@@ -51,8 +51,9 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 
 - [x] Native status, lanes, queue/congestion metrics, impairment configuration, and platform smoke
   probes (Linux and Windows x64 artifacts/runtime, IPv4/IPv6 loopback, and native loss injection).
-- [~] ICE/STUN/TURN configuration, short-lived credential rotation, signaling, and direct-to-relay
-  fallback are integrated at the managed boundary; public traversal remains unverified.
+- [~] Native ICE/STUN/TURN configuration injection, short-lived credential rotation, signaling, and
+  direct-to-relay fallback are integrated and configuration-tested; public traversal remains
+  unverified because it requires two external peers.
 - [~] Authenticated native scenario and protected certificate CI path are integrated; actual CI
   execution remains unprovisioned until `GNS_NATIVE_CERTIFICATE_B64` contains a valid coordinator
   certificate.
