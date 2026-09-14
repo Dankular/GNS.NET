@@ -110,16 +110,22 @@ public sealed class RewindAuthorization
 public sealed class HitboxRewindHistory
 {
     private readonly int capacity;
+    private readonly int maxHitboxesPerFrame;
     private readonly LinkedList<(uint Tick, RewindHitbox[] Hitboxes)> frames = new();
-    public HitboxRewindHistory(int capacity = 128) { if (capacity < 2) throw new ArgumentOutOfRangeException(nameof(capacity)); this.capacity = capacity; }
+    public HitboxRewindHistory(int capacity = 128, int maxHitboxesPerFrame = 4096) { if (capacity < 2) throw new ArgumentOutOfRangeException(nameof(capacity)); if (maxHitboxesPerFrame < 1) throw new ArgumentOutOfRangeException(nameof(maxHitboxesPerFrame)); this.capacity = capacity; this.maxHitboxesPerFrame = maxHitboxesPerFrame; }
     public int Count => this.frames.Count;
+    public long RejectedHitboxes { get; private set; }
     public IReadOnlyList<RewindHit> RaycastAuthorized(DateTimeOffset serverNow, DateTimeOffset claimedViewTime, RewindAuthorization authorization, Func<DateTimeOffset, uint> tickForTime, float originX, float originY, float directionX, float directionY, float maxDistance)
     {
         ArgumentNullException.ThrowIfNull(authorization); ArgumentNullException.ThrowIfNull(tickForTime);
         return authorization.TryGetAuthorizedTime(serverNow, claimedViewTime, out DateTimeOffset authorized) ? this.Raycast(tickForTime(authorized), originX, originY, directionX, directionY, maxDistance) : [];
     }
     public void Record(uint tick, IEnumerable<RewindHitbox> hitboxes)
-    { this.frames.AddLast((tick, hitboxes.ToArray())); while (this.frames.Count > this.capacity) this.frames.RemoveFirst(); }
+    {
+        RewindHitbox[] all = hitboxes?.ToArray() ?? throw new ArgumentNullException(nameof(hitboxes));
+        if (all.Length > this.maxHitboxesPerFrame) { this.RejectedHitboxes += all.Length - this.maxHitboxesPerFrame; all = all[..this.maxHitboxesPerFrame]; }
+        this.frames.AddLast((tick, all)); while (this.frames.Count > this.capacity) this.frames.RemoveFirst();
+    }
     public IReadOnlyList<RewindHit> Raycast(uint tick, float originX, float originY, float directionX, float directionY, float maxDistance)
     {
         if (maxDistance < 0 || directionX == 0 && directionY == 0) return [];

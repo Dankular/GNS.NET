@@ -60,7 +60,7 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Enforce scene/team/owner/occlusion lifecycle ordering.
   - [x] Prevent hidden entities from entering serialized batches.
 - [ ] M4.2 Bounded hitbox budgets
-  - [ ] Add memory/retention budgets and rejection metrics.
+  - [x] Add memory/retention budgets and rejection metrics.
 - [ ] M4.3 Authoritative shooter rewind integration
   - [ ] Bind measured per-client view time to rewind queries.
   - [ ] Test hidden-entity and unauthorized-time attacks.

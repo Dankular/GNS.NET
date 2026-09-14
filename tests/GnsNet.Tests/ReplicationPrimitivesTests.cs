@@ -69,6 +69,14 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void HitboxHistory_EnforcesPerFrameBudgetAndCountsRejections()
+    {
+        var history = new HitboxRewindHistory(maxHitboxesPerFrame: 2);
+        history.Record(1, new[] { new RewindHitbox(1, 0, 0, 1), new RewindHitbox(2, 2, 0, 1), new RewindHitbox(3, 4, 0, 1) });
+        Assert.Equal(1, history.RejectedHitboxes); Assert.Equal(2, history.Raycast(1, 0, 0, 1, 0, 10).Count);
+    }
+
+    [Fact]
     public void ObserverTracker_EmitsOnlyEnterAndLeaveTransitions()
     {
         var tracker = new ObserverTracker<int, int>(); var entered = new List<int>(); var left = new List<int>(); tracker.Entered += (_, entity) => entered.Add(entity); tracker.Left += (_, entity) => left.Add(entity);
