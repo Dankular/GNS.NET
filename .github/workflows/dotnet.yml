@@ -27,7 +27,13 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Replay and load smoke benchmark
-      run: dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario all --clients 2 --entities 100 --iterations 1000 --payload-bytes 64
+      run: mkdir -p artifacts && dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario all --clients 16 --entities 1000 --iterations 1000 --payload-bytes 128 --json artifacts/ci-benchmark.json
+    - name: Upload replay and load regression artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnsnet-ci-replay-load-regression
+        path: artifacts/ci-benchmark.json
+        if-no-files-found: error
 
   native-linux:
     runs-on: ubuntu-24.04

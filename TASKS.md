@@ -89,8 +89,8 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M6.3 Replay and load testing
   - [x] Add persistent replay index and metadata.
   - [~] Add redaction and deterministic playback environments (redaction and deterministic playback are integrated; isolated environment orchestration remains open).
-  - [ ] Add CI replay regression captures.
-  - [ ] Add connection, room, entity, payload, impairment, and reconnect-storm ramps.
+  - [x] Add CI replay regression captures.
+  - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (CI now runs a high-cardinality smoke profile; a full matrix remains open).
 - [ ] M6.4 Release compatibility
   - [ ] Define compatibility and migration policy.
   - [ ] Add migration tooling, package signing, and release smoke tests.
