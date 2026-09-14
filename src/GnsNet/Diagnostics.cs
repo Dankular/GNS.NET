@@ -135,6 +135,14 @@ public sealed class NetworkRecorder
         await writer.WriteUInt32Async(FileMagic, cancellationToken); await writer.WriteUInt16Async(2, cancellationToken); await writer.WriteUInt32Async((uint)snapshot.Length, cancellationToken);
         foreach (RecordedPacket packet in snapshot) { await writer.WriteInt64Async(packet.Time.UtcTicks, cancellationToken); await writer.WriteByteAsync(packet.Outbound ? (byte)1 : (byte)0, cancellationToken); await writer.WriteByteAsync((byte)packet.Channel, cancellationToken); byte[] connection = Encoding.UTF8.GetBytes(packet.ConnectionId ?? string.Empty); await writer.WriteUInt16Async((ushort)connection.Length, cancellationToken); await writer.WriteAsync(connection, cancellationToken); await writer.WriteUInt32Async((uint)packet.Data.Length, cancellationToken); await writer.WriteAsync(packet.Data, cancellationToken); }
     }
+    public Task SaveAsync(string path, Func<RecordedPacket, RecordedPacket> redact, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(redact);
+        NetworkRecorder sanitized = new();
+        foreach (RecordedPacket packet in this.Packets) sanitized.RecordPacket(redact(packet));
+        return sanitized.SaveAsync(path, cancellationToken);
+    }
+    private void RecordPacket(RecordedPacket packet) { lock (this.sync) this.packets.Add(packet with { Data = packet.Data.ToArray() }); }
     public static async Task<NetworkRecorder> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
         await using var stream = File.OpenRead(path);

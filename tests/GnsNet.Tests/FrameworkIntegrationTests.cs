@@ -179,6 +179,20 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public async Task NetworkRecorder_PersistsRedactedCapture()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"gnsnet-redacted-{Guid.NewGuid():N}.replay");
+        try
+        {
+            var recorder = new NetworkRecorder(); recorder.Record(true, [1, 2, 3], connectionId: "secret");
+            await recorder.SaveAsync(path, packet => packet with { ConnectionId = "redacted", Data = [0] });
+            NetworkRecorder loaded = await NetworkRecorder.LoadAsync(path); RecordedPacket packet = Assert.Single(loaded.Packets);
+            Assert.Equal("redacted", packet.ConnectionId); Assert.Equal(new byte[] { 0 }, packet.Data);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
     public void PrioritySendQueue_ShedsFramesAtConfiguredBudgetAndAccountsBytes()
     {
         var queue = new PrioritySendQueue(maxFrames: 1, maxBytes: 64); var first = new NetFrame(1, 1, new byte[8]); var second = new NetFrame(2, 1, new byte[8]);
