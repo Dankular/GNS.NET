@@ -64,6 +64,22 @@ public sealed class TickLoop
         }
     }
 
+    /// <summary>Runs simulation ticks with bounded coordinator-driven catch-up and drift-adjusted pacing.</summary>
+    public async Task RunCoordinatedAsync(Action<uint, TimeSpan> onTick, TickRateCoordinator coordinator, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(onTick); ArgumentNullException.ThrowIfNull(coordinator);
+        uint localTick = 0; long lastTimestamp = Stopwatch.GetTimestamp();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            int count = Math.Max(1, coordinator.TicksToSimulate(localTick));
+            for (int i = 0; i < count && !cancellationToken.IsCancellationRequested; i++)
+            {
+                long now = Stopwatch.GetTimestamp(); onTick(localTick++, Stopwatch.GetElapsedTime(lastTimestamp, now)); lastTimestamp = now;
+            }
+            try { await Task.Delay(coordinator.TickDuration, cancellationToken).ConfigureAwait(false); } catch (OperationCanceledException) { break; }
+        }
+    }
+
     /// <summary>Runs the loop while applying load-based tick reduction with recovery hysteresis.</summary>
     public Task RunAdaptiveAsync(Action<uint, TimeSpan> onTick, AdaptiveTickController controller, LoadSheddingPolicy policy, Func<ServerLoad> loadProvider, CancellationToken cancellationToken)
     {

@@ -82,6 +82,14 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public async Task TickLoop_UsesBoundedCoordinatorCatchup()
+    {
+        var coordinator = new TickRateCoordinator(60, 3); coordinator.ApplyServerClock(10, 60); using var cancellation = new CancellationTokenSource(); var ticks = new List<uint>();
+        await new TickLoop(TimeSpan.Zero).RunCoordinatedAsync((tick, _) => { ticks.Add(tick); if (ticks.Count >= 3) cancellation.Cancel(); }, coordinator, cancellation.Token);
+        Assert.Equal(new uint[] { 0, 1, 2 }, ticks);
+    }
+
+    [Fact]
     public void RollbackDetailed_ReportsCorrectionsAndEnforcesResimulationBudget()
     {
         var rollback = new RollbackBuffer<int, int>(maxResimulationTicks: 2); rollback.Record(1, 1, 1); rollback.Record(2, 1, 2); rollback.Record(3, 1, 3);

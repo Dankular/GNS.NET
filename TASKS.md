@@ -48,7 +48,7 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Apply correction smoothing to rendered state.
 - [ ] M3.2 Clock/tick policy integration
   - [x] Apply measured drift to synchronization policy.
-  - [ ] Integrate bounded catch-up/slow-down into TickLoop.
+  - [x] Integrate bounded catch-up/slow-down into TickLoop.
   - [x] Expose prediction cost and misprediction magnitude.
 - [ ] M3.3 Impairment and long-rollback tests
   - [ ] Test latency, jitter, packet loss, and duplicate snapshots.
