@@ -10,12 +10,16 @@ public sealed class NetworkFrameworkOptions
     public byte StateOpcode { get; init; } = 2;
     public int SnapshotBufferCapacity { get; init; } = 32;
     public uint InterpolationDelayTicks { get; init; } = 2;
+    public int ServerTickRateHz { get; init; } = 60;
+    public int MaxPredictionCatchUpTicks { get; init; } = 4;
     public void Validate()
     {
         if (InputOpcode is 0 or 0xFC or 0xFD or 0xFE || StateOpcode is 0 or 0xFC or 0xFD or 0xFE)
             throw new ArgumentException("Application opcodes overlap reserved framework control opcodes.");
         if (InputOpcode == StateOpcode) throw new ArgumentException("InputOpcode and StateOpcode must differ.");
         if (SnapshotBufferCapacity < 2) throw new ArgumentOutOfRangeException(nameof(SnapshotBufferCapacity));
+        if (ServerTickRateHz is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(ServerTickRateHz));
+        if (MaxPredictionCatchUpTicks < 1) throw new ArgumentOutOfRangeException(nameof(MaxPredictionCatchUpTicks));
     }
 }
 
@@ -62,6 +66,7 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
 {
     private readonly Func<TState, TInput, TState> simulate;
     private readonly Func<TState, TState, float, TState> interpolate;
+    private readonly Func<TState, TState, double>? measureMisprediction;
     private readonly NetworkFrameworkOptions options;
     public GnsClientHost Host { get; }
     public ClientPrediction<TInput, TState> Prediction { get; } = new();
@@ -70,19 +75,40 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
     public TState? AuthoritativeState { get; private set; }
     public int LastResimulatedTicks => this.Prediction.LastResimulatedTicks;
     public bool LastCorrected => this.Prediction.LastCorrected;
+    public double LastMispredictionMagnitude { get; private set; }
+    public double TotalMispredictionMagnitude { get; private set; }
+    public long MispredictionCount { get; private set; }
+    public NetworkClockSynchronizer Clock { get; } = new();
+    public TickRateCoordinator TickCoordinator { get; }
+    public uint ServerTick => this.TickCoordinator.ServerTick;
+    public TimeSpan TickDuration => this.TickCoordinator.TickDuration;
     public event Action<TState>? StateReconciled;
 
     public GnsPredictedClient(GnsClientHost host, TState initialState, Func<TState, TInput, TState> simulate,
-        Func<TState, TState, float, TState> interpolate, NetworkFrameworkOptions? options = null)
+        Func<TState, TState, float, TState> interpolate, NetworkFrameworkOptions? options = null,
+        Func<TState, TState, double>? measureMisprediction = null)
     {
         this.Host = host ?? throw new ArgumentNullException(nameof(host));
         this.simulate = simulate ?? throw new ArgumentNullException(nameof(simulate));
         this.interpolate = interpolate ?? throw new ArgumentNullException(nameof(interpolate));
         this.options = options ?? new NetworkFrameworkOptions(); this.options.Validate();
+        this.measureMisprediction = measureMisprediction;
+        this.TickCoordinator = new TickRateCoordinator(this.options.ServerTickRateHz, this.options.MaxPredictionCatchUpTicks);
         this.PredictedState = initialState;
         this.Snapshots = new SnapshotBuffer<TState>(this.options.SnapshotBufferCapacity);
         this.Host.Router.Register<TState>(this.options.StateOpcode, (state, frame) => this.ReceiveAuthoritative(frame.Tick, state));
     }
+
+    /// <summary>Applies a server clock sample and propagates measured drift into prediction pacing.</summary>
+    public void ApplyServerTiming(uint serverTick, int serverHz, DateTimeOffset clientSent,
+        DateTimeOffset serverReceived, DateTimeOffset serverSent, DateTimeOffset clientReceived)
+    {
+        this.Clock.AddSample(clientSent, serverReceived, serverSent, clientReceived);
+        this.TickCoordinator.ApplyServerClock(serverTick, serverHz);
+        this.TickCoordinator.ApplyMeasuredDrift(this.Clock.DriftPartsPerMillion);
+    }
+
+    public int TicksToSimulate(uint localTick) => this.TickCoordinator.TicksToSimulate(localTick);
 
     public bool SubmitInput(uint tick, TInput input)
     {
@@ -96,6 +122,12 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
 
     private void ReceiveAuthoritative(uint tick, TState state)
     {
+        this.LastMispredictionMagnitude = this.measureMisprediction?.Invoke(this.PredictedState, state) ?? 0d;
+        if (this.LastMispredictionMagnitude > 0d)
+        {
+            this.MispredictionCount++;
+            this.TotalMispredictionMagnitude += this.LastMispredictionMagnitude;
+        }
         this.AuthoritativeState = state;
         this.PredictedState = this.Prediction.Reconcile(tick, state, this.simulate);
         this.Snapshots.Add(tick, this.PredictedState);

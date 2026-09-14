@@ -6,6 +6,32 @@ using Xunit;
 public sealed class PredictionRuntimeTests
 {
     [Fact]
+    public async Task PredictedClient_FacadePropagatesClockDriftAndCorrectionMetrics()
+    {
+        var transport = new ReconnectableClient(() => throw new InvalidOperationException());
+        var host = new GnsClientHost(transport);
+        var options = new NetworkFrameworkOptions { ServerTickRateHz = 30, MaxPredictionCatchUpTicks = 3 };
+        var client = new GnsPredictedClient<TestState, TestState>(host, new TestState { Value = 0 },
+            (state, input) => new TestState { Value = state.Value + input.Value },
+            (from, to, amount) => new TestState { Value = from.Value + (int)MathF.Round((to.Value - from.Value) * amount) }, options,
+            (predicted, authoritative) => Math.Abs(predicted.Value - authoritative.Value));
+        DateTimeOffset origin = DateTimeOffset.UnixEpoch;
+        client.ApplyServerTiming(10, 30, origin, origin.AddMilliseconds(50), origin.AddMilliseconds(50), origin.AddMilliseconds(100));
+        client.ApplyServerTiming(11, 30, origin.AddSeconds(1), origin.AddSeconds(1).AddMilliseconds(51), origin.AddSeconds(1).AddMilliseconds(51), origin.AddSeconds(1).AddMilliseconds(100));
+        Assert.Equal(11u, client.ServerTick);
+        Assert.Equal(3, client.TicksToSimulate(7));
+        Assert.Equal(client.Clock.DriftPartsPerMillion, client.TickCoordinator.AppliedDriftPartsPerMillion);
+        Assert.NotEqual(TimeSpan.FromSeconds(1d / 30), client.TickDuration);
+
+        client.SubmitInput(12, new TestState { Value = 5 });
+        host.Router.Dispatch(new NetFrame(options.StateOpcode, 12, NetSerializer.Serialize(new TestState { Value = 3 })));
+        Assert.Equal(2d, client.LastMispredictionMagnitude);
+        Assert.Equal(1, client.MispredictionCount);
+        Assert.Equal(2d, client.TotalMispredictionMagnitude);
+        await host.DisposeAsync();
+    }
+
+    [Fact]
     public void ClockSynchronizer_ComputesOffsetAndJitter()
     {
         var clock = new NetworkClockSynchronizer(); var origin = DateTimeOffset.UnixEpoch;
