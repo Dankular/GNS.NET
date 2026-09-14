@@ -35,6 +35,127 @@ short-lived GNS.NET connection token. See [GameService integration](docs/gameser
 for the boundary and example flow. The GameService repository is the source of truth for
 control-plane APIs; this repository is the source of truth for realtime gameplay APIs.
 
+## Walkthrough: GameService (GS) and GNS.NET together
+
+Think of GS as the control plane and GNS.NET as the data plane:
+
+```text
+client
+  │ Nakama login / matchmaking
+  ▼
+GS control plane ── allocates a server, checks roster and build, signs a join claim
+  │ HTTPS join claim
+  ▼
+allocated game server ── verifies the GS claim and creates a short-lived transport token
+  │ GameNetworkingSockets connection
+  ▼
+GNS.NET host ── admits the connection, runs ticks, validates input, and replicates state
+```
+
+The two systems are joined at the allocated game-server boundary. GS does not serialize gameplay
+snapshots and GNS.NET does not own Nakama sessions, matchmaking, Agones, or the match database.
+The normal match flow is:
+
+1. The client authenticates with Nakama and obtains GS matchmaking/session credentials.
+2. GS matches the player and allocates a game server. The allocation supplies the server address,
+   ports, match identity, and a short-lived signed join claim.
+3. The client presents that claim to the allocated game server over the GS join API. The game
+   server verifies the Ed25519 signature and checks match, allocation, player, roster, build, slot,
+   and expiry before allowing realtime access.
+4. The game server maps the verified GS subject to a GNS.NET session id and issues a separate,
+   short-lived `ConnectTokenService` token. This token is scoped to realtime transport; it is not
+   the GS signing claim and is never minted by an untrusted client.
+5. The client connects to the allocated address with `GnsClient`/`GnsClientHost`. GNS.NET validates
+   the admission token in its reserved handshake frame, then the server attaches the session and
+   starts accepting typed input.
+6. After admission, GNS.NET owns the authoritative tick loop, input guards, AOI/delta snapshots,
+   prediction/reconciliation metadata, reconnect grace, heartbeat metrics, and replay capture.
+   GS remains responsible for match lifecycle and service-level health decisions.
+
+### Game-server integration
+
+This is the GNS.NET side of the boundary. `VerifyGsJoinClaimAsync` is the small GS adapter: its
+implementation belongs to GS or the game server because it needs the GS Ed25519 public key and
+match/allocation state.
+
+```csharp
+using GnsNet;
+
+using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions
+{
+    RequireNativeAuthentication = true,
+});
+using GnsServer server = GnsServer.Listen("[::]:27015");
+
+byte[] admissionSecret = Convert.FromBase64String(
+    Environment.GetEnvironmentVariable("GNS_ADMISSION_SECRET")
+        ?? throw new InvalidOperationException("GNS_ADMISSION_SECRET is required."));
+var tokenService = new ConnectTokenService(admissionSecret);
+var admission = new ConnectionAdmission(tokenService);
+var host = new GnsServerHost<string>(server, TimeSpan.FromSeconds(30), admission);
+
+// Called by the GS join endpoint handler, before attaching a realtime session.
+async Task<string> AdmitGsJoinAsync(string signedGsClaim, CancellationToken cancellationToken)
+{
+    GsJoinClaim claim = await VerifyGsJoinClaimAsync(signedGsClaim, cancellationToken);
+    // The adapter must reject bad signatures, wrong match/allocation/build,
+    // unknown roster members, duplicate slots, and expired claims.
+    return tokenService.Issue(claim.Subject, TimeSpan.FromSeconds(30));
+}
+
+// The returned token is supplied by the client during the GNS.NET handshake.
+bool accepted = host.Admit(connection, transportToken);
+if (accepted)
+    host.AttachSession(claim.Subject, connection);
+```
+
+In a real server, `connection`, `transportToken`, and `claim` are values from the server's
+join/session coordinator rather than global variables. The security ordering is:
+
+```text
+verify GS claim → issue GNS.NET token → establish GNS connection → host.Admit → AttachSession
+```
+
+The client receives only the allocated endpoint and short-lived transport token:
+
+```csharp
+using GnsRuntime runtime = GnsRuntime.Initialize();
+var reconnecting = new ReconnectableClient(() => GnsClient.Connect(allocatedAddress));
+var clientHost = new GnsClientHost(reconnecting, transportToken);
+clientHost.Start();
+```
+
+### Where GameNetworkingSockets fits
+
+GNS.NET is the managed framework layer; Valve's GameNetworkingSockets is the native transport
+engine loaded by GnsSharp. `GnsRuntime` loads one native library, initializes GNS, and pumps its
+callback queue. `GnsServer`/`GnsClient` create native listen/connect handles. `GnsServerHost` and
+`GnsClientHost` add the game protocol above those handles: versioned `NetFrame` messages, MemoryPack
+payloads, admission, heartbeats, channels, replication, and reconnect behavior.
+
+```text
+Game state / simulation / GS claim adapter
+                 │
+        GnsServerHost / GnsClientHost
+                 │  NetFrame + MemoryPack
+        GnsServer / GnsClient (GnsSharp)
+                 │  P/Invoke
+        GameNetworkingSockets native library
+                 │
+       UDP / relay / ICE / native encryption
+```
+
+GNS provides delivery, connection state, channels, congestion handling, encryption/certificate
+state, and (when built and deployed for it) ICE/SDR relay behavior. GNS.NET provides the
+authoritative game protocol and policy around that transport. Native GNS certificate provisioning
+and GS join-claim validation are separate checks. For local development, use the explicit
+`--insecure` sample switch only; public deployments must use native authentication/encryption and
+a protected GS admission secret.
+
+For a runnable two-process example, see [`samples/Poc/README.md`](samples/Poc/README.md). For the
+actual GS HTTP boundary and claim-validation responsibilities, see
+[`docs/gameservice-integration.md`](docs/gameservice-integration.md).
+
 The audited capability roadmap and comparison against Unity Netcode, Photon Fusion, FishNet,
 Mirror, Unreal Iris, Godot, and Valve GNS is in [MILESTONES.md](MILESTONES.md). It distinguishes
 implemented and tested framework behavior from external validation and remaining work.
