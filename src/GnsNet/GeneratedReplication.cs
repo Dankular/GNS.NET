@@ -17,10 +17,16 @@ public static class DirtyFieldMaskCodec
 
     public static (int SchemaVersion, DirtyFieldMask Mask, IReadOnlyDictionary<int, byte[]> Fields) Decode(ReadOnlySpan<byte> data, int expectedSchema, int fieldCount, int maximumFieldBytes = 1024 * 1024)
     {
+        try { return DecodeCore(data, expectedSchema, fieldCount, maximumFieldBytes); }
+        catch (EndOfStreamException exception) { throw new InvalidDataException("Truncated generated replication payload.", exception); }
+    }
+
+    private static (int SchemaVersion, DirtyFieldMask Mask, IReadOnlyDictionary<int, byte[]> Fields) DecodeCore(ReadOnlySpan<byte> data, int expectedSchema, int fieldCount, int maximumFieldBytes)
+    {
         if (fieldCount < 1 || maximumFieldBytes < 1) throw new ArgumentOutOfRangeException();
         using var stream = new MemoryStream(data.ToArray()); using var reader = new BinaryReader(stream);
         int schema = reader.ReadInt32(); if (schema != expectedSchema) throw new InvalidDataException("Replication schema mismatch.");
-        int words = reader.ReadInt32(); if (words != (fieldCount + 63) / 64) throw new InvalidDataException("Invalid dirty-field mask size.");
+        int words = reader.ReadInt32(); if (words < 0 || words != (fieldCount + 63) / 64) throw new InvalidDataException("Invalid dirty-field mask size.");
         var mask = new DirtyFieldMask(fieldCount); for (int i = 0; i < words; i++) { ulong word = reader.ReadUInt64(); for (int bit = 0; bit < 64 && i * 64 + bit < fieldCount; bit++) if ((word & (1UL << bit)) != 0) mask.Set(i * 64 + bit); }
         var fields = new Dictionary<int, byte[]>(); foreach (int field in Enumerable.Range(0, fieldCount).Where(mask.IsSet)) { int length = reader.ReadInt32(); if (length < 0 || length > maximumFieldBytes || length > stream.Length - stream.Position) throw new InvalidDataException("Invalid generated field payload."); fields[field] = reader.ReadBytes(length); }
         if (stream.Position != stream.Length) throw new InvalidDataException("Trailing generated field data.");

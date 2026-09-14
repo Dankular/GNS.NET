@@ -27,6 +27,19 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void DirtyFieldMaskCodec_RejectsDeterministicMalformedCorpus()
+    {
+        var mask = new DirtyFieldMask(3); mask.Set(2); byte[] valid = DirtyFieldMaskCodec.Encode(3, mask, _ => [9]);
+        for (int length = 0; length < valid.Length; length++) Assert.Throws<InvalidDataException>(() => DirtyFieldMaskCodec.Decode(valid.AsSpan(0, length), 3, 3));
+        var random = new Random(17);
+        for (int i = 0; i < 256; i++)
+        {
+            byte[] bytes = new byte[random.Next(0, 96)]; random.NextBytes(bytes);
+            try { DirtyFieldMaskCodec.Decode(bytes, 3, 3); } catch (InvalidDataException) { }
+        }
+    }
+
+    [Fact]
     public void Rollback_ReplaysOnlyNewerInputsWithinBoundedHistory()
     {
         var rollback = new RollbackBuffer<int, int>(); rollback.Record(1, 2, 2); rollback.Record(2, 3, 5); rollback.Record(3, 4, 9);

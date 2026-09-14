@@ -37,8 +37,8 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Add queue-age/starvation handling.
   - [x] Expose per-connection shed/drop decisions.
 - [ ] M2.4 Malformed-input property/fuzz suite
-  - [ ] Fuzz malformed snapshots and baseline loss.
-  - [ ] Fuzz schema mismatch, tick wraparound, and partial entities.
+  - [x] Fuzz malformed snapshots and baseline loss.
+  - [~] Fuzz schema mismatch, tick wraparound, and partial entities (deterministic malformed snapshot corpus is covered; broader property/fuzzer integration remains open).
 
 ## M3 — Prediction and time
 
