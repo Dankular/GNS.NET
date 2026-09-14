@@ -77,6 +77,33 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void HitboxHistory_EvictsOldestFramesAtTotalRetentionBudget()
+    {
+        var history = new HitboxRewindHistory(capacity: 8, maxRetainedHitboxes: 3);
+        history.Record(1, [new RewindHitbox(1, 2, 0, 1), new RewindHitbox(2, 4, 0, 1)]);
+        history.Record(2, [new RewindHitbox(3, 6, 0, 1), new RewindHitbox(4, 8, 0, 1)]);
+
+        Assert.Equal(1, history.Count);
+        Assert.Equal(2, history.RetainedHitboxes);
+        Assert.Equal(3, history.MaxRetainedHitboxes);
+        Assert.Equal(0, history.RejectedHitboxes);
+        Assert.Equal(new long[] { 3, 4 }, history.Raycast(1, 0, 0, 1, 0, 20).Select(hit => hit.EntityId));
+        Assert.Equal(new long[] { 3, 4 }, history.Raycast(2, 0, 0, 1, 0, 20).Select(hit => hit.EntityId));
+    }
+
+    [Fact]
+    public void HitboxHistory_RejectsInvalidAndDuplicateRegistrations()
+    {
+        var history = new HitboxRewindHistory();
+        history.Record(1, [new RewindHitbox(0, 0, 0, 1), new RewindHitbox(1, float.NaN, 0, 1), new RewindHitbox(2, 0, 0, -1), new RewindHitbox(3, 0, 0, float.PositiveInfinity), new RewindHitbox(4, 2, 0, 1), new RewindHitbox(4, 3, 0, 1)]);
+
+        Assert.Equal(4, history.RejectedInvalidHitboxes);
+        Assert.Equal(1, history.RejectedDuplicateHitboxes);
+        Assert.Equal(1, history.RetainedHitboxes);
+        Assert.Single(history.Raycast(1, 0, 0, 1, 0, 20));
+    }
+
+    [Fact]
     public void RewindViewTimeRegistry_RejectsUnregisteredAndOutOfWindowClaims()
     {
         var registry = new RewindViewTimeRegistry<string>(); var authorization = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);

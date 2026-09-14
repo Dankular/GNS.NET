@@ -124,10 +124,15 @@ public sealed class HitboxRewindHistory
 {
     private readonly int capacity;
     private readonly int maxHitboxesPerFrame;
+    private readonly int maxRetainedHitboxes;
     private readonly LinkedList<(uint Tick, RewindHitbox[] Hitboxes)> frames = new();
-    public HitboxRewindHistory(int capacity = 128, int maxHitboxesPerFrame = 4096) { if (capacity < 2) throw new ArgumentOutOfRangeException(nameof(capacity)); if (maxHitboxesPerFrame < 1) throw new ArgumentOutOfRangeException(nameof(maxHitboxesPerFrame)); this.capacity = capacity; this.maxHitboxesPerFrame = maxHitboxesPerFrame; }
+    public HitboxRewindHistory(int capacity = 128, int maxHitboxesPerFrame = 4096, int maxRetainedHitboxes = 524_288) { if (capacity < 2) throw new ArgumentOutOfRangeException(nameof(capacity)); if (maxHitboxesPerFrame < 1) throw new ArgumentOutOfRangeException(nameof(maxHitboxesPerFrame)); if (maxRetainedHitboxes < 1) throw new ArgumentOutOfRangeException(nameof(maxRetainedHitboxes)); this.capacity = capacity; this.maxHitboxesPerFrame = maxHitboxesPerFrame; this.maxRetainedHitboxes = maxRetainedHitboxes; }
     public int Count => this.frames.Count;
+    public int RetainedHitboxes => this.frames.Sum(frame => frame.Hitboxes.Length);
+    public int MaxRetainedHitboxes => this.maxRetainedHitboxes;
     public long RejectedHitboxes { get; private set; }
+    public long RejectedInvalidHitboxes { get; private set; }
+    public long RejectedDuplicateHitboxes { get; private set; }
     public IReadOnlyList<RewindHit> RaycastAuthorized(DateTimeOffset serverNow, DateTimeOffset claimedViewTime, RewindAuthorization authorization, Func<DateTimeOffset, uint> tickForTime, float originX, float originY, float directionX, float directionY, float maxDistance)
     {
         ArgumentNullException.ThrowIfNull(authorization); ArgumentNullException.ThrowIfNull(tickForTime);
@@ -148,9 +153,20 @@ public sealed class HitboxRewindHistory
     }
     public void Record(uint tick, IEnumerable<RewindHitbox> hitboxes)
     {
-        RewindHitbox[] all = hitboxes?.ToArray() ?? throw new ArgumentNullException(nameof(hitboxes));
+        ArgumentNullException.ThrowIfNull(hitboxes);
+        var valid = new List<RewindHitbox>(); var ids = new HashSet<long>();
+        foreach (RewindHitbox hitbox in hitboxes)
+        {
+            if (hitbox.EntityId < 1 || !float.IsFinite(hitbox.X) || !float.IsFinite(hitbox.Y) || !float.IsFinite(hitbox.Radius) || hitbox.Radius < 0)
+            { this.RejectedInvalidHitboxes++; continue; }
+            if (!ids.Add(hitbox.EntityId)) { this.RejectedDuplicateHitboxes++; continue; }
+            valid.Add(hitbox);
+        }
+        RewindHitbox[] all = valid.ToArray();
         if (all.Length > this.maxHitboxesPerFrame) { this.RejectedHitboxes += all.Length - this.maxHitboxesPerFrame; all = all[..this.maxHitboxesPerFrame]; }
+        if (all.Length > this.maxRetainedHitboxes) { this.RejectedHitboxes += all.Length - this.maxRetainedHitboxes; all = all[..this.maxRetainedHitboxes]; }
         this.frames.AddLast((tick, all)); while (this.frames.Count > this.capacity) this.frames.RemoveFirst();
+        while (this.RetainedHitboxes > this.maxRetainedHitboxes && this.frames.First is not null) this.frames.RemoveFirst();
     }
     public IReadOnlyList<RewindHit> Raycast(uint tick, float originX, float originY, float directionX, float directionY, float maxDistance)
     {
