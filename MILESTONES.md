@@ -1,22 +1,24 @@
 # GNS.NET milestones and gap analysis
 
-This roadmap compares GNS.NET with production networking stacks and turns the gaps into testable milestones. Existing transport, authentication, authoritative simulation, prediction helpers, snapshot buffering, AOI/delta/priority delivery, replay, scaling, and PlayFab flows are documented in [README.md](README.md) and tracked in [TODO.md](TODO.md). The items below are new framework-level gaps, not claims that an interface-only placeholder is complete.
+This roadmap compares GNS.NET with production networking stacks and turns the gaps into testable milestones. Statuses below are audited against the current repository: `[x]` means implemented, integrated, tested, and verified; `[~]` means a supported partial implementation or an external validation dependency; `[ ]` means genuinely incomplete. The plan is intentionally engine-neutral and does not treat interfaces or scaffolding as finished features.
+
+Current audit: the M1-M6 foundation is implemented in substantial pieces, but no milestone exit criterion is yet fully satisfied. The remaining gaps are called out explicitly below.
 
 ## Findings from comparable libraries
 
-| Capability seen in other stacks | Evidence | GNS.NET gap |
+| Capability seen in other stacks | Evidence | Current GNS.NET status |
 | --- | --- | --- |
-| Network-object lifecycle and remote actions | [Mirror Network Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-manager), [Mirror communications](https://mirror-networking.gitbook.io/docs/manual/guides/communications) | No built-in network object IDs, spawn/despawn, ownership, commands, RPCs, or request/reply correlation. Applications currently define these on top of frames. |
-| Scene, room, and observer lifecycle | [Mirror Room Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-room-manager), [Mirror scene interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management/scene) | No framework room state machine, ready/start lock, late-join policy, scene transition protocol, or scene/team observer conditions. |
-| Full rollback prediction loop | [Unity Netcode prediction](https://docs.unity.cn/Packages/com.unity.netcode%401.0/manual/prediction.html) | Prediction stores inputs and reconciles a supplied state, but does not own a tick-synchronised rollback world, deterministic resimulation budget, prediction smoothing, or misprediction telemetry. |
-| Network time and tick coordination | [Photon Fusion time synchronization](https://doc.photonengine.com/fusion/v2/manual/advanced/time-synchronization) | No measured server-time offset, clock drift estimator, tick-rate negotiation, or client catch-up/slow-down policy. |
-| Quantized replicated state and extrapolation | [Unity ghost snapshots](https://docs.unity.cn/Packages/com.unity.netcode%401.1/manual/ghost-snapshots.html) | MemoryPack is real serialization, but there is no framework schema for field masks, quantization, compression, entity lifecycle deltas, or bounded extrapolation/smoothing. |
-| Spatially scalable observers | [FishNet observers](https://fish-networking.gitbook.io/docs/guides/features/observers), [Mirror interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management) | AOI exists as distance culling, but there is no spatial hash, scene/team/visibility condition composition, observer enter/leave events, or automatic visibility-safe spawn/despawn. |
-| Sub-tick lag compensation | [Photon Fusion lag compensation](https://doc.photonengine.com/fusion/v2/manual/advanced/lag-compensation) | History lookup/interpolation exists, but no registered hitbox world, rewind query API, sub-tick ray/sphere/box queries, or per-client rewind limits. |
-| Replication scheduling and parallel work | [Unreal Iris components](https://dev.epicgames.com/documentation/en-us/unreal-engine/components-of-iris-in-unreal-engine) | Snapshot pipeline is functional but single-path; no shared encode cache, dependency graph, parallel preparation, per-connection budgets, or prioritised dirty-component scheduler. |
-| Explicit authority and RPC modes | [Godot high-level multiplayer](https://docs.godotengine.org/en/stable/tutorials/networking/high_level_multiplayer.html) | No declarative authority mode, call-local policy, endpoint capability, or automatic rejection of invalid remote method calls. |
-| Native transport diagnostics and lanes | [Valve GameNetworkingSockets](https://github.com/ValveSoftware/GameNetworkingSockets) | Framework metrics are application-level; native detailed connection stats and `ConfigureConnectionLanes` are not exposed through a stable GNS.NET diagnostics/scheduling API. |
-| P2P rendezvous and relay operation | [Valve P2P requirements](https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/README_P2P.md) | ConnectP2P/ListenP2P wrappers and ICE settings exist, but no production signaling service, TURN/relay provider adapter, rendezvous protocol, or traversal test matrix. |
+| Network-object lifecycle and remote actions | [Mirror Network Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-manager), [Mirror communications](https://mirror-networking.gitbook.io/docs/manual/guides/communications) | `[~]` Object lifecycle, ownership, RPC authority, and correlation exist; command routing, timeouts, and complete automatic wiring remain. |
+| Scene, room, and observer lifecycle | [Mirror Room Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-room-manager), [Mirror scene interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management/scene) | `[~]` Room phases, ready/start lock, late join, and scene/team AOI filters exist; scene transitions and observer events remain. |
+| Full rollback prediction loop | [Unity Netcode prediction](https://docs.unity.cn/Packages/com.unity.netcode%401.0/manual/prediction.html) | `[~]` Bounded rollback/resimulation, tick coordination, and correction metrics exist; a full integrated prediction world and smoothing remain. |
+| Network time and tick coordination | [Photon Fusion time synchronization](https://doc.photonengine.com/fusion/v2/manual/advanced/time-synchronization) | `[~]` Heartbeat offset/jitter and tick-rate/catch-up coordination exist; drift estimation and integrated slow-down policy remain. |
+| Quantized replicated state and extrapolation | [Unity ghost snapshots](https://docs.unity.cn/Packages/com.unity.netcode%401.1/manual/ghost-snapshots.html) | `[~]` MemoryPack, field masks, quantization, compression, and extrapolation exist; generated replicated fields and lifecycle delta protocol remain. |
+| Spatially scalable observers | [FishNet observers](https://fish-networking.gitbook.io/docs/guides/features/observers), [Mirror interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management) | `[~]` Spatial hash and scene/team/custom visibility culling exist; observer events and automatic visibility-safe lifecycle delivery remain. |
+| Sub-tick lag compensation | [Photon Fusion lag compensation](https://doc.photonengine.com/fusion/v2/manual/advanced/lag-compensation) | `[~]` Registered bounded hitboxes and ray/sub-tick/sphere/box queries exist; per-client rewind authorization/limits remain. |
+| Replication scheduling and parallel work | [Unreal Iris components](https://dev.epicgames.com/documentation/en-us/unreal-engine/components-of-iris-in-unreal-engine) | `[~]` Shared bounded encode cache and parallel preparation exist; dependency scheduling, automatic budgets, and dirty-component scheduling remain. |
+| Explicit authority and RPC modes | [Godot high-level multiplayer](https://docs.godotengine.org/en/stable/tutorials/networking/high_level_multiplayer.html) | `[~]` Authority modes and generated RPC registration exist; endpoint capability discovery and full automatic dispatch remain. |
+| Native transport diagnostics and lanes | [Valve GameNetworkingSockets](https://github.com/ValveSoftware/GameNetworkingSockets) | `[x]` Native detailed status, lane configuration, lane send, queue, rate, quality, and congestion fields are exposed and build-tested. |
+| P2P rendezvous and relay operation | [Valve P2P requirements](https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/README_P2P.md) | `[~]` Authenticated HTTP signaling, relay plan, and traversal test harness exist; native GNS traversal and hostile-network matrix remain externally unverified. |
 
 ## Cross-check against `GS/codex(7).md`
 
@@ -51,61 +53,61 @@ and the end-to-end test that allocates a dedicated server before the gameplay cl
 
 ### M1 — Replication runtime foundation
 
-- [ ] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
-- [ ] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration.
-- [ ] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies.
-- [ ] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons.
-- [ ] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join.
+- [x] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
+- [~] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; automatic transport rehydration remains.
+- [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; command classes, timeout, and client-target routing remain.
+- [~] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons. Scene transition messages remain.
+- [~] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join; current tests cover core idempotency/authority/late join, not the full reconnect integration.
 
 Exit criteria: a sample game can create entities, transfer ownership, call an authenticated RPC, reconnect, and rebuild the same object graph without handwritten lifecycle envelopes.
 
 ### M2 — Production replication protocol
 
-- [ ] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation.
-- [ ] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection.
-- [ ] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters.
-- [ ] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.
+- [~] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; masks/quantization/compression and basic schema metadata exist, but generated fields/compatibility negotiation remain.
+- [~] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; the current pipeline still requires caller invocation.
+- [~] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters; queue/load controls exist but are not fully integrated into automatic snapshot scheduling.
+- [x] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.
 - [ ] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets.
 
 Exit criteria: callers submit authoritative entities/components once; the runtime chooses fields, encodes only relevant changes, emits lifecycle deltas, and reports budget decisions without manual pipeline calls.
 
 ### M3 — Tick-synchronised prediction and time
 
-- [ ] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement.
-- [ ] Add client/server tick negotiation and bounded catch-up/slow-down behavior.
-- [ ] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick.
-- [ ] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation.
+- [~] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement; offset/jitter and tick rate exist, drift measurement remains.
+- [~] Add client/server tick negotiation and bounded catch-up/slow-down behavior; negotiation/catch-up exists, full loop integration remains.
+- [~] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick; bounded generic rollback exists, full state metadata/runtime integration remains.
+- [~] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation; limits/count/extrapolation exist, magnitude/smoothing remain.
 - [ ] Add tests under artificial latency, jitter, loss, duplicate snapshots, clock drift, and long rollback windows.
 
 Exit criteria: the sample client predicts immediately, rewinds to an authoritative tick, replays inputs to present, smooths corrections, and exposes prediction cost/misprediction data.
 
 ### M4 — Visibility and lag-compensated gameplay
 
-- [ ] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions.
+- [~] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions; distance/scene/team/custom visibility exist, owner/occlusion remain.
 - [ ] Add observer enter/leave events and visibility-safe spawn/despawn ordering.
-- [ ] Add a registered historical hitbox/collider representation with bounded retention and memory budgets.
-- [ ] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy.
+- [~] Add a registered historical hitbox/collider representation with bounded retention and memory budgets; bounded hitbox history exists, memory budgets remain.
+- [~] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy; queries exist, maximum rewind policy remains.
 - [ ] Add security tests proving hidden entities are not serialized and clients cannot select another client’s rewind time.
 
 Exit criteria: a sample shooter can register hitboxes, perform an authoritative rewind query using the shooter’s measured view time, and replicate only valid observers.
 
 ### M5 — Transport, P2P, and native operations
 
-- [ ] Expose native GNS connection stats, lanes, send queues, and congestion/backpressure state through stable framework metrics.
-- [ ] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback.
+- [x] Expose native GNS connection stats, lanes, send queues, and congestion/backpressure state through stable framework metrics.
+- [~] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback; the authenticated adapter/contract exists, but native traversal remains unverified.
 - [ ] Add LAN, NAT-type, IPv4/IPv6, symmetric-connect, relay, and hostile-network integration tests.
-- [ ] Fix and verify the current native loopback acceptance path; add Windows/Linux native-library CI jobs that run the transport benchmark.
-- [ ] Cache vcpkg/native dependencies and publish native binaries as CI artifacts; never rely on a developer-installed DLL.
+- [~] Fix and verify the current native loopback acceptance path; Windows/Linux native-library CI jobs are committed but the local loopback issue and CI execution remain.
+- [~] Cache vcpkg/native dependencies and publish native binaries as CI artifacts; artifact jobs exist, but CI publication has not yet executed.
 
 Exit criteria: CI produces supported native artifacts, runs authenticated client/server transport tests, and reports throughput, RTT, loss, connection setup, and P2P traversal results.
 
 ### M6 — Developer experience and operations
 
-- [ ] Add source generators/analyzers for message IDs, replicated fields, RPC authority, schema versions, and duplicate registrations.
+- [~] Add source generators/analyzers for message IDs, replicated fields, RPC authority, schema versions, and duplicate registrations; message IDs, RPC metadata/registration, schema version, and duplicate IDs exist, replicated-field generation and duplicate endpoint registration remain.
 - [ ] Add generated API/reference docs and templates for server, client, room, entity, and auth-provider adapters.
-- [ ] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay.
-- [ ] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures.
-- [ ] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output.
+- [~] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay; telemetry and overlay data exist, dashboards remain.
+- [~] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures; persistent replay and CI smoke coverage exist, indexing/redaction remain.
+- [~] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output; benchmark scenarios exist but JSON output and all load dimensions remain.
 - [ ] Add compatibility policy, protocol version negotiation, migration tooling, package signing, and release smoke tests.
 
 Exit criteria: a new developer can scaffold a server/client, define messages and replicated entities, run a deterministic network test, inspect metrics, and reproduce a captured session from CI.
