@@ -94,11 +94,15 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options)
         {
             long sentAt = Stopwatch.GetTimestamp();
             foreach (GnsClient client in clients) { client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay); sent++; }
-            Thread.Yield();
-            foreach (ReceivedMessage message in server.Poll()) server.Send(message.Connection, message.Data, ESteamNetworkingSendType.UnreliableNoDelay);
-            Thread.Yield();
-            foreach (GnsClient client in clients) received += client.Poll().Count;
-            if (received > 0) rtts.Add((Stopwatch.GetTimestamp() - sentAt) * 1000d / Stopwatch.Frequency);
+            long iterationReceived = 0; Stopwatch pump = Stopwatch.StartNew();
+            while (iterationReceived < clients.Count && pump.Elapsed < TimeSpan.FromMilliseconds(100))
+            {
+                foreach (ReceivedMessage message in server.Poll()) server.Send(message.Connection, message.Data, ESteamNetworkingSendType.UnreliableNoDelay);
+                foreach (GnsClient client in clients) iterationReceived += client.Poll().Count;
+                if (iterationReceived < clients.Count) Thread.Yield();
+            }
+            received += iterationReceived;
+            if (iterationReceived > 0) rtts.Add((Stopwatch.GetTimestamp() - sentAt) * 1000d / Stopwatch.Frequency);
         }
         timer.Stop();
         double loss = sent == 0 ? 0 : 1d - (double)received / sent;
