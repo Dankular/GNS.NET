@@ -29,6 +29,7 @@ if (options.JsonPath is not null && options.Scenario is not "saturation")
 }
 
 if (options.Scenario == "matrix") RunMatrix(options);
+if (options.Scenario == "native-matrix") RunNativeMatrix(options);
 
 void Run(string name, BenchmarkOptions options, Func<BenchmarkOptions, BenchmarkResult> benchmark)
 {
@@ -112,6 +113,33 @@ static void RunTransport(BenchmarkOptions options)
     {
         Console.WriteLine($"GNS loopback transport: unavailable ({exception.Message})");
         Console.WriteLine("Build or provide the native GameNetworkingSockets library, then pass --native-path <path>.");
+    }
+}
+
+static void RunNativeMatrix(BenchmarkOptions options)
+{
+    if (!options.Insecure) throw new InvalidOperationException("The native matrix is intentionally unauthenticated; pass --insecure explicitly.");
+    int[] clients = [1, options.Clients];
+    int[] payloads = [Math.Min(32, Math.Max(1, options.PayloadBytes)), Math.Max(1, options.PayloadBytes)];
+    var profiles = new List<NativeMatrixProfileResult>();
+    foreach (int clientCount in clients.Distinct())
+        foreach (int payloadBytes in payloads.Distinct())
+            foreach (int lossPercent in new[] { 0, 10 })
+                foreach (bool reconnect in new[] { false, true })
+                {
+                    BenchmarkOptions profile = options with { Clients = clientCount, PayloadBytes = payloadBytes, NativeLossPercent = lossPercent };
+                    TransportResult first = BenchmarkTransport(profile, 1);
+                    TransportResult second = reconnect ? BenchmarkTransport(profile, 1) : default;
+                    NativeMatrixProfile matrix = new(clientCount, payloadBytes, lossPercent, reconnect);
+                    NativeMatrixProfileResult result = new(matrix, first.SentSequences + second.SentSequences, first.UniqueSequences + second.UniqueSequences, first.MissingSequences + second.MissingSequences, first.DuplicateSequences + second.DuplicateSequences, first.Bytes + second.Bytes);
+                    profiles.Add(result);
+                    Console.WriteLine($"Native matrix clients={clientCount} payload={payloadBytes} loss={lossPercent}% reconnect={reconnect}: unique={result.UniqueSequences:N0}/{result.SentSequences:N0} missing={result.MissingSequences:N0} duplicates={result.DuplicateSequences:N0}");
+                }
+    if (options.JsonPath is not null)
+    {
+        object document = new { schema = 1, deterministic = options.Deterministic, scenario = "native-matrix", clients = options.Clients, payloadBytes = options.PayloadBytes, iterations = options.Iterations, profiles };
+        File.WriteAllText(options.JsonPath, System.Text.Json.JsonSerializer.Serialize(document, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"Native matrix JSON: {options.JsonPath}");
     }
 }
 
@@ -396,6 +424,8 @@ static NetBatch CreateBatch(int count)
 readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Elapsed, long Allocated, string? Fingerprint = null);
 readonly record struct MatrixProfile(int Clients, int Entities, int PayloadBytes, double LossPercent, bool Reconnect);
 readonly record struct MatrixProfileResult(MatrixProfile Profile, int Frames, int CapturedPackets, int DeliveredPackets, int ReplayedLifecycleRecords);
+readonly record struct NativeMatrixProfile(int Clients, int PayloadBytes, int LossPercent, bool Reconnect);
+readonly record struct NativeMatrixProfileResult(NativeMatrixProfile Profile, long SentSequences, long UniqueSequences, long MissingSequences, long DuplicateSequences, long Bytes);
 
 sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, string Address, string? NativeCertificatePath, int NativeLossPercent, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
 {
@@ -404,7 +434,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         string scenario = Value(args, "--scenario") ?? "all";
         int clients = Number(args, "--clients", 16), entities = Number(args, "--entities", 1_000), iterations = Number(args, "--iterations", 10_000), payload = Number(args, "--payload-bytes", 128);
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
-        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "authenticated-transport" or "p2p" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, authenticated-transport, p2p, saturation, playfab, or matrix.");
+        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "authenticated-transport" or "p2p" or "native-matrix" or "saturation" or "playfab" or "matrix")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, authenticated-transport, p2p, native-matrix, saturation, playfab, or matrix.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
         int nativeLoss = Number(args, "--native-loss-percent", 0);
         if (nativeLoss is < 0 or > 100) throw new ArgumentException("--native-loss-percent must be between 0 and 100.");

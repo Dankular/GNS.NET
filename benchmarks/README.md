@@ -6,7 +6,7 @@
 dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario all --clients 32 --entities 5000 --iterations 2000
 ```
 
-Scenarios are `serialize`, `stress`, `batch`, `pipeline`, `prediction`, `replay`, `matrix`, `transport`, `authenticated-transport`, `p2p`, and `playfab`. `stress` runs concurrent client serialization with `--parallelism` worker limits, useful for finding allocation and contention problems. Adjust `--clients`, `--entities`, `--iterations`, `--payload-bytes`, and `--parallelism` to model a target workload. Use Release builds for comparisons and repeat runs on an otherwise idle machine.
+Scenarios are `serialize`, `stress`, `batch`, `pipeline`, `prediction`, `replay`, `matrix`, `transport`, `authenticated-transport`, `p2p`, `native-matrix`, and `playfab`. `stress` runs concurrent client serialization with `--parallelism` worker limits, useful for finding allocation and contention problems. Adjust `--clients`, `--entities`, `--iterations`, `--payload-bytes`, and `--parallelism` to model a target workload. Use Release builds for comparisons and repeat runs on an otherwise idle machine.
 
 The `playfab` scenario uses one persistent account from `.env`/environment credentials and performs a live adapter smoke test: login, obtain the Entity Session Token, register a game-server entity, create a server-owned Lobby, and join it as the client. It never creates an account during normal runs and never prints credentials. Set `PLAYFAB_TEST_EMAIL`, `PLAYFAB_TEST_USERNAME`, and `PLAYFAB_TEST_PASSWORD` once. To explicitly provision that account the first time, add `--register-test-account` for one run, then omit it afterward:
 
@@ -71,6 +71,20 @@ dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario matri
 
 This matrix does not simulate kernel NAT behavior or replace two-peer IPv4/IPv6, symmetric-NAT,
 Coturn, or hostile-network tests.
+
+The `native-matrix` scenario runs the same cross-dimension idea through the real native transport.
+It varies one-client versus the requested client count, small versus requested payloads, zero versus
+10% native impairment, and performs a second complete connection session for reconnect profiles. Each
+profile reports application sequence totals, missing packets, duplicates, and bytes:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario native-matrix --insecure --native-path C:\path\to\libGameNetworkingSockets.so --clients 16 --iterations 100 --payload-bytes 128 --json artifacts/native-matrix.json
+```
+
+Hosted Linux native CI runs a bounded smoke version of this matrix. The build VPS can run a larger
+version with the same native artifact. This is native load/reconnect coverage, not public NAT,
+relay, symmetric-NAT, or hostile-network validation; those still require independently networked
+peers.
 
 For repeatable CI comparisons, use `--deterministic`. It removes wall-clock/allocation fields from the JSON and emits a stable SHA-256 replay fingerprint:
 

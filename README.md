@@ -814,6 +814,16 @@ dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario matri
 This is managed regression coverage; it does not replace public IPv4/IPv6, NAT-type, symmetric-NAT,
 Coturn, or hostile-network testing.
 
+For corresponding real-native load and reconnect coverage, run the native matrix on the build VPS or
+a platform runner with the built GameNetworkingSockets library:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario native-matrix --insecure --native-path <path-to-native-library> --clients 16 --iterations 100 --payload-bytes 128 --json artifacts/native-matrix.json
+```
+
+The native matrix varies client count, payload size, native impairment, and a second connection
+session for reconnect profiles. It does not replace the separate two-peer public NAT/relay matrix.
+
 The native Linux harness builds GameNetworkingSockets, runs the managed suite, and executes the
 explicitly insecure local transport smoke test:
 

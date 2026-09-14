@@ -355,11 +355,14 @@ jobs:
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv4.json
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address '[::1]:27991' --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv6.json
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --native-loss-percent 10 --deterministic --json artifacts/linux-transport-loss.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario native-matrix --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 4 --iterations 20 --payload-bytes 64 --deterministic --json artifacts/linux-native-matrix.json
     - name: Upload Linux runtime smoke result
       uses: actions/upload-artifact@v4
       with:
         name: gnsnet-linux-runtime-smoke
-        path: artifacts/linux-transport-*.json
+        path: |
+          artifacts/linux-transport-*.json
+          artifacts/linux-native-matrix.json
         if-no-files-found: error
 
   native-artifact-consumer:
