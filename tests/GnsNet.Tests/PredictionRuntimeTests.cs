@@ -2,6 +2,7 @@ namespace GnsNet.Tests;
 
 using GnsNet;
 using Xunit;
+using System.Buffers.Binary;
 
 public sealed class PredictionRuntimeTests
 {
@@ -10,7 +11,8 @@ public sealed class PredictionRuntimeTests
     {
         var transport = new ReconnectableClient(() => throw new InvalidOperationException());
         var host = new GnsClientHost(transport);
-        var options = new NetworkFrameworkOptions { ServerTickRateHz = 30, MaxPredictionCatchUpTicks = 3 };
+        var options = new NetworkFrameworkOptions { ServerTickRateHz = 30, MaxPredictionCatchUpTicks = 3,
+            PredictionTimestep = TimeSpan.FromMilliseconds(16), DeterministicSeed = 42, WorldVersion = 7 };
         var client = new GnsPredictedClient<TestState, TestState>(host, new TestState { Value = 0 },
             (state, input) => new TestState { Value = state.Value + input.Value },
             (from, to, amount) => new TestState { Value = from.Value + (int)MathF.Round((to.Value - from.Value) * amount) }, options,
@@ -22,12 +24,15 @@ public sealed class PredictionRuntimeTests
         Assert.Equal(3, client.TicksToSimulate(7));
         Assert.Equal(client.Clock.DriftPartsPerMillion, client.TickCoordinator.AppliedDriftPartsPerMillion);
         Assert.NotEqual(TimeSpan.FromSeconds(1d / 30), client.TickDuration);
+        Assert.Equal(new PredictionTickMetadata(TimeSpan.FromMilliseconds(16), 42, 7), client.PredictionMetadata);
 
-        client.SubmitInput(12, new TestState { Value = 5 });
+        var replayMetadata = new PredictionTickMetadata(TimeSpan.FromMilliseconds(20), 99, 8);
+        client.SubmitInput(13, new TestState { Value = 5 }, replayMetadata);
         host.Router.Dispatch(new NetFrame(options.StateOpcode, 12, NetSerializer.Serialize(new TestState { Value = 3 })));
-        Assert.Equal(2d, client.LastMispredictionMagnitude);
+        Assert.Equal(4d, client.LastMispredictionMagnitude);
         Assert.Equal(1, client.MispredictionCount);
-        Assert.Equal(2d, client.TotalMispredictionMagnitude);
+        Assert.Equal(4d, client.TotalMispredictionMagnitude);
+        Assert.Equal(new[] { replayMetadata }, client.LastReplayedMetadata);
         await host.DisposeAsync();
     }
 
@@ -82,6 +87,29 @@ public sealed class PredictionRuntimeTests
             byte[] bytes = new byte[random.Next(0, 96)]; random.NextBytes(bytes);
             try { DirtyFieldMaskCodec.Decode(bytes, 3, 3); } catch (InvalidDataException) { }
         }
+    }
+
+    [Fact]
+    public void ReplicationMalformedCorpus_RejectsBoundedlyAcrossSchemaWrapPartialAndBaselineCases()
+    {
+        var mask = new DirtyFieldMask(3); mask.Set(1);
+        byte[] valid = DirtyFieldMaskCodec.Encode(7, mask, _ => [0xA5, 0x5A]);
+        var schemaMismatch = valid.ToArray(); BinaryPrimitives.WriteInt32LittleEndian(schemaMismatch, 3);
+        var partialEntity = valid[..^1];
+        foreach (byte[] payload in new[] { schemaMismatch, partialEntity, Array.Empty<byte>(), new byte[4096] })
+        {
+            Assert.Throws<InvalidDataException>(() => DirtyFieldMaskCodec.Decode(payload, 7, 3, maximumFieldBytes: 128));
+        }
+
+        var snapshots = new SnapshotBuffer<int>(8);
+        snapshots.Add(uint.MaxValue - 1, 1); snapshots.Add(uint.MaxValue, 2); snapshots.Add(0, 3); snapshots.Add(1, 4);
+        snapshots.Add(uint.MaxValue - 2, 99);
+        Assert.Equal(4, snapshots.Count);
+
+        var delta = new DeltaCompressor<int>((baseline, current) => current - baseline, (baseline, change) => baseline + change);
+        Assert.Equal(5, delta.Apply("baseline-lost", 5));
+        delta.Acknowledge("baseline-lost", 5);
+        Assert.Equal(7, delta.Apply("baseline-lost", 2));
     }
 
     [Fact]
