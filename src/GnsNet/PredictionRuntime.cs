@@ -32,9 +32,15 @@ public sealed class TickRateCoordinator
     public int ServerHz { get; private set; }
     public int MaxCatchUpTicks { get; }
     public uint ServerTick { get; private set; }
-    public TimeSpan TickDuration => TimeSpan.FromSeconds(1d / ServerHz);
+    public double AppliedDriftPartsPerMillion { get; private set; }
+    public TimeSpan TickDuration => TimeSpan.FromSeconds(1d / (ServerHz * (1d + AppliedDriftPartsPerMillion / 1_000_000d)));
     public void ApplyServerClock(uint serverTick, int serverHz)
     { if (serverHz is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(serverHz)); ServerTick = serverTick; ServerHz = serverHz; }
+    public void ApplyMeasuredDrift(double partsPerMillion)
+    {
+        if (double.IsNaN(partsPerMillion) || double.IsInfinity(partsPerMillion)) throw new ArgumentOutOfRangeException(nameof(partsPerMillion));
+        this.AppliedDriftPartsPerMillion = Math.Clamp(partsPerMillion, -5000d, 5000d);
+    }
     public int TicksToSimulate(uint localTick)
     { uint behind = unchecked(ServerTick - localTick); return behind > 0x7FFFFFFF ? 0 : Math.Min((int)behind, MaxCatchUpTicks); }
     public bool IsAhead(uint localTick) => TickSequence.IsNewer(ServerTick, localTick);

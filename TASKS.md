@@ -47,7 +47,7 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Rewind and resimulate a complete sample world.
   - [ ] Apply correction smoothing to rendered state.
 - [ ] M3.2 Clock/tick policy integration
-  - [ ] Apply measured drift to synchronization policy.
+  - [x] Apply measured drift to synchronization policy.
   - [ ] Integrate bounded catch-up/slow-down into TickLoop.
   - [x] Expose prediction cost and misprediction magnitude.
 - [ ] M3.3 Impairment and long-rollback tests

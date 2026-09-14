@@ -73,6 +73,15 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void TickRateCoordinator_AppliesBoundedMeasuredClockDrift()
+    {
+        var coordinator = new TickRateCoordinator(60); coordinator.ApplyMeasuredDrift(2500);
+        Assert.Equal(2500, coordinator.AppliedDriftPartsPerMillion); Assert.True(coordinator.TickDuration < TimeSpan.FromSeconds(1d / 60));
+        coordinator.ApplyMeasuredDrift(100_000); Assert.Equal(5000, coordinator.AppliedDriftPartsPerMillion);
+        coordinator.ApplyMeasuredDrift(-100_000); Assert.Equal(-5000, coordinator.AppliedDriftPartsPerMillion);
+    }
+
+    [Fact]
     public void RollbackDetailed_ReportsCorrectionsAndEnforcesResimulationBudget()
     {
         var rollback = new RollbackBuffer<int, int>(maxResimulationTicks: 2); rollback.Record(1, 1, 1); rollback.Record(2, 1, 2); rollback.Record(3, 1, 3);
