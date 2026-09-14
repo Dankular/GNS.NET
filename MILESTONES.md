@@ -8,8 +8,8 @@ Current audit: the M1-M6 foundation is implemented in substantial pieces, but no
 
 | Capability seen in other stacks | Evidence | Current GNS.NET status |
 | --- | --- | --- |
-| Network-object lifecycle and remote actions | [Mirror Network Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-manager), [Mirror communications](https://mirror-networking.gitbook.io/docs/manual/guides/communications) | `[~]` Object lifecycle, ownership, RPC authority, and correlation exist; command routing, timeouts, and complete automatic wiring remain. |
-| Scene, room, and observer lifecycle | [Mirror Room Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-room-manager), [Mirror scene interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management/scene) | `[~]` Room phases, ready/start lock, late join, and scene/team AOI filters exist; scene transitions and observer events remain. |
+| Network-object lifecycle and remote actions | [Mirror Network Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-manager), [Mirror communications](https://mirror-networking.gitbook.io/docs/manual/guides/communications) | `[x]` Object lifecycle, ownership, typed RPC authority, correlation, timeout, host transport wiring, and targeted client invocation exist. |
+| Scene, room, and observer lifecycle | [Mirror Room Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-room-manager), [Mirror scene interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management/scene) | `[x]` Room phases, ready/start lock, late join snapshots, scene transitions, and authoritative lifecycle events are integrated and tested. |
 | Full rollback prediction loop | [Unity Netcode prediction](https://docs.unity.cn/Packages/com.unity.netcode%401.0/manual/prediction.html) | `[~]` Bounded rollback/resimulation, tick coordination, and correction metrics exist; a full integrated prediction world and smoothing remain. |
 | Network time and tick coordination | [Photon Fusion time synchronization](https://doc.photonengine.com/fusion/v2/manual/advanced/time-synchronization) | `[~]` Heartbeat offset/jitter and tick-rate/catch-up coordination exist; drift estimation and integrated slow-down policy remain. |
 | Quantized replicated state and extrapolation | [Unity ghost snapshots](https://docs.unity.cn/Packages/com.unity.netcode%401.1/manual/ghost-snapshots.html) | `[~]` MemoryPack, field masks, quantization, compression, and extrapolation exist; generated replicated fields and lifecycle delta protocol remain. |
@@ -54,10 +54,10 @@ and the end-to-end test that allocates a dedicated server before the gameplay cl
 ### M1 — Replication runtime foundation
 
 - [x] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
-- [~] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; registered lifecycle journals now replay automatically on resumed attach, but full-graph fallback after journal retention remains.
-- [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; authority, generated registration, correlation, and cancellation exist, but command classes and client-target routing remain.
-- [~] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons. Scene transition messages remain.
-- [~] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join; current tests cover core idempotency/authority/late join, not the full reconnect integration.
+- [x] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; registered lifecycle journals replay automatically on resumed attach with full-graph fallback after retention.
+- [x] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; typed MemoryPack envelopes and targeted client invocation are wired through both hosts.
+- [x] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, scene transition events, and authoritative late-join snapshots.
+- [x] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, typed RPC transport envelopes, and late join.
 
 Exit criteria: a sample game can create entities, transfer ownership, call an authenticated RPC, reconnect, and rebuild the same object graph without handwritten lifecycle envelopes.
 

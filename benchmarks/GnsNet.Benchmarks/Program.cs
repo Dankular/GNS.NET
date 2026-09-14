@@ -18,19 +18,23 @@ if (options.Scenario is "all" or "prediction") Run("client prediction reconcilia
 if (options.Scenario is "all" or "replay") Run("persisted capture replay", options, BenchmarkReplay);
 if (options.JsonPath is not null && options.Scenario is not "saturation")
 {
-    File.WriteAllText(options.JsonPath, System.Text.Json.JsonSerializer.Serialize(new { generatedAt = DateTimeOffset.UtcNow, scenario = options.Scenario, clients = options.Clients, entities = options.Entities, iterations = options.Iterations, results = benchmarkResults }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    object document = options.Deterministic
+        ? new { schema = 1, deterministic = true, scenario = options.Scenario, clients = options.Clients, entities = options.Entities, iterations = options.Iterations, results = benchmarkResults }
+        : new { schema = 1, generatedAt = DateTimeOffset.UtcNow, scenario = options.Scenario, clients = options.Clients, entities = options.Entities, iterations = options.Iterations, results = benchmarkResults };
+    File.WriteAllText(options.JsonPath, System.Text.Json.JsonSerializer.Serialize(document, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     Console.WriteLine($"Benchmark JSON: {options.JsonPath}");
 }
 
 void Run(string name, BenchmarkOptions options, Func<BenchmarkOptions, BenchmarkResult> benchmark)
 {
     BenchmarkResult result = benchmark(options);
-    benchmarkResults.Add(new { name, result.Operations, result.Bytes, elapsedMs = result.Elapsed.TotalMilliseconds, result.Allocated, opsPerSecond = result.Operations / Math.Max(result.Elapsed.TotalSeconds, double.Epsilon) });
+    benchmarkResults.Add(new { name, result.Operations, result.Bytes, elapsedMs = options.Deterministic ? 0 : result.Elapsed.TotalMilliseconds, allocated = options.Deterministic ? 0 : result.Allocated, opsPerSecond = options.Deterministic ? 0 : result.Operations / Math.Max(result.Elapsed.TotalSeconds, double.Epsilon), fingerprint = result.Fingerprint });
     Console.WriteLine($"{name}: {result.Operations:N0} ops | {result.Operations / result.Elapsed.TotalSeconds:N0} ops/s | {result.Bytes / 1024d / 1024d:N2} MiB processed | {result.Allocated / (double)Math.Max(1, result.Operations):N1} B/op | {result.Elapsed.TotalMilliseconds:N1} ms");
 }
 
 static void RunTransport(BenchmarkOptions options)
 {
+    if (!options.Insecure) throw new InvalidOperationException("The local transport benchmark is intentionally unauthenticated; pass --insecure explicitly.");
     try
     {
         TransportResult result = BenchmarkTransport(options, 1);
@@ -91,6 +95,7 @@ static async Task RunPlayFab(BenchmarkOptions options)
 
 static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst)
 {
+    if (!options.Insecure) throw new InvalidOperationException("Native authentication is not configured for this loopback harness. Pass --insecure explicitly for development-only transport coverage.");
     using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, RequireNativeAuthentication = false, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
     using GnsServer server = GnsServer.Listen("[::]:27991", Math.Max(64, options.Clients * 2));
     server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = false, RequireEncrypted = false };
@@ -232,7 +237,8 @@ static BenchmarkResult BenchmarkReplay(BenchmarkOptions options)
         recorder.SaveAsync(path).GetAwaiter().GetResult(); NetworkRecorder loaded = NetworkRecorder.LoadAsync(path).GetAwaiter().GetResult();
         int delivered = loaded.ReplayTransportAsync(_ => ValueTask.FromResult(true), speed: double.MaxValue).GetAwaiter().GetResult(); timer.Stop();
         if (delivered != options.Iterations) throw new InvalidDataException("Replay did not deliver every captured packet.");
-        return new(delivered, loaded.Packets.Sum(x => (long)x.Data.Length), timer.Elapsed, GC.GetAllocatedBytesForCurrentThread());
+        string fingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(loaded.Packets.SelectMany(x => BitConverter.GetBytes(x.Time.UtcTicks).Concat(x.Data)).ToArray()));
+        return new(delivered, loaded.Packets.Sum(x => (long)x.Data.Length), timer.Elapsed, GC.GetAllocatedBytesForCurrentThread(), fingerprint);
     }
     finally { if (File.Exists(path)) File.Delete(path); }
 }
@@ -248,9 +254,9 @@ static NetBatch CreateBatch(int count)
 [MemoryPackable] public partial record BenchmarkEntity(int Id, float X, float Y);
 [MemoryPackable] public partial record BenchmarkSnapshot(uint Tick, int Client, int EntityCount);
 [MemoryPackable] public partial record BenchmarkInput(float Dx, float Dy);
-readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Elapsed, long Allocated);
+readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Elapsed, long Allocated, string? Fingerprint = null);
 
-sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, bool RegisterTestAccount, string? JsonPath)
+sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, bool RegisterTestAccount, bool Insecure, string? JsonPath, bool Deterministic)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -259,7 +265,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
         if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "saturation" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, saturation, or playfab.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
-        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), Value(args, "--json"));
+        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), args.Contains("--insecure", StringComparer.OrdinalIgnoreCase), Value(args, "--json"), args.Contains("--deterministic", StringComparer.OrdinalIgnoreCase));
     }
     private static int Number(string[] args, string name, int fallback) => int.TryParse(Value(args, name), out int value) ? value : fallback;
     private static string? Value(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }

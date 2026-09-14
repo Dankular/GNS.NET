@@ -36,13 +36,77 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+    - name: Generate API reference
+      shell: pwsh
+      run: ./scripts/generate-api-reference.ps1
     - name: Replay and load smoke benchmark
-      run: mkdir -p artifacts && dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario all --clients 16 --entities 1000 --iterations 1000 --payload-bytes 128 --json artifacts/ci-benchmark.json
+      run: mkdir -p artifacts && dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario all --clients 16 --entities 1000 --iterations 1000 --payload-bytes 128 --deterministic --json artifacts/ci-benchmark.json
+    - name: Verify deterministic replay fingerprint
+      shell: bash
+      run: |
+        set -euo pipefail
+        dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario replay --iterations 1000 --deterministic --json artifacts/replay-a.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks --no-build -- --scenario replay --iterations 1000 --deterministic --json artifacts/replay-b.json
+        test "$(jq -r '.results[0].fingerprint' artifacts/replay-a.json)" = "$(jq -r '.results[0].fingerprint' artifacts/replay-b.json)"
     - name: Upload replay and load regression artifact
       uses: actions/upload-artifact@v4
       with:
         name: gnsnet-ci-replay-load-regression
         path: artifacts/ci-benchmark.json
+        if-no-files-found: error
+
+  native-auth-capability:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Restore and build auth contract
+      run: dotnet build GnsNet.sln -c Release
+    - name: Verify transport requires an explicit insecure switch
+      shell: bash
+      run: |
+        set -euo pipefail
+        if dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --clients 1 --iterations 1 >/tmp/gns-auth-switch.log 2>&1; then
+          echo "Transport benchmark unexpectedly ran without --insecure" >&2
+          cat /tmp/gns-auth-switch.log >&2
+          exit 1
+        fi
+        grep -F -- "pass --insecure explicitly" /tmp/gns-auth-switch.log
+    - name: Run managed admission and authentication capability tests
+      run: |
+        dotnet test tests/GnsNet.Tests/GnsNet.Tests.csproj -c Release --no-build --filter FullyQualifiedName~ConnectionPolicyTests
+        dotnet test tests/GnsNet.Tests/GnsNet.Tests.csproj -c Release --no-build --filter FullyQualifiedName~ExternalAuthenticationTests
+    - name: Check CI contains no embedded credentials
+      shell: bash
+      run: |
+        set -euo pipefail
+        if grep -RInE --exclude='*.md' '(PLAYFAB_SECRET|STEAM.*KEY|TURN.*SECRET|PASSWORD[[:space:]]*[:=]|API_KEY[[:space:]]*[:=])' .github docker; then
+          echo "Credential-like value found in native CI configuration" >&2
+          exit 1
+        fi
+    - name: Publish native authentication capability report
+      shell: bash
+      run: |
+        mkdir -p artifacts
+        cat > artifacts/native-auth-capability.json <<'JSON'
+        {
+          "nativeTransportAuthentication": "not-configured",
+          "loopbackMode": "explicit-insecure-only",
+          "managedAdmissionAndExternalAuthenticationTests": "passed",
+          "embeddedSecrets": false,
+          "realSteamworksOrGNSCertificateValidation": "not-verified",
+          "realNatTurnTraversal": "not-verified"
+        }
+        JSON
+    - name: Upload native authentication capability report
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnsnet-native-auth-capability
+        path: artifacts/native-auth-capability.json
         if-no-files-found: error
 
   native-linux:

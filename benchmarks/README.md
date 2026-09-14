@@ -15,13 +15,19 @@ dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario playf
 dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario playfab
 ```
 
-The `transport` scenario starts a real local GNS listener and clients, then measures loopback echo throughput, bytes on wire, connection setup, RTT p50/p99, and loss. It is development-only and deliberately disables native authentication/encryption for loopback. Use `--native-path` when the GNS DLL is not next to the benchmark executable:
+The `transport` scenario starts a real local GNS listener and clients, then measures loopback echo throughput, bytes on wire, connection setup, RTT p50/p99, and loss. It is development-only and deliberately disables native authentication/encryption for loopback; `--insecure` is mandatory so this choice is explicit. This is not authenticated transport coverage. Use `--native-path` when the GNS DLL is not next to the benchmark executable:
 
 ```powershell
-dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario transport --clients 32 --iterations 10000 --payload-bytes 256 --native-path C:\path\to\GameNetworkingSockets.dll
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario transport --insecure --clients 32 --iterations 10000 --payload-bytes 256 --native-path C:\path\to\GameNetworkingSockets.dll
 ```
 
 Without a native GNS library the tool reports transport capacity as unavailable; application-layer scenarios remain runnable.
+
+For repeatable CI comparisons, use `--deterministic`. It removes wall-clock/allocation fields from the JSON and emits a stable SHA-256 replay fingerprint:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario replay --iterations 1000 --deterministic --json artifacts/replay.json
+```
 
 ```powershell
 dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario stress --clients 1000 --iterations 5000 --payload-bytes 256 --parallelism 12

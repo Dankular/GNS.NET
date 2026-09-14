@@ -60,6 +60,9 @@ public sealed class NetworkObjectRegistry<TClientId> where TClientId : notnull
 public enum RoomPhase { Lobby, Ready, Starting, InGame, Draining, Ended }
 public readonly record struct RoomMember<TClientId>(TClientId Client, bool Ready) where TClientId : notnull;
 public readonly record struct RoomSceneTransition(string From, string To, uint Tick);
+public enum RoomLifecycleEventKind { Joined, Left, ReadyChanged, Started, GameBegan, SceneChanged, Draining, Ended }
+public readonly record struct RoomLifecycleEvent<TClientId>(RoomLifecycleEventKind Kind, TClientId? Client, RoomPhase Phase, string Scene, uint Tick) where TClientId : notnull;
+public readonly record struct RoomStateSnapshot<TClientId>(RoomPhase Phase, string Scene, IReadOnlyCollection<RoomMember<TClientId>> Members, IReadOnlyCollection<NetworkObjectDescriptor> Objects) where TClientId : notnull;
 
 /// <summary>Deterministic room lifecycle with ready/start locking and late-join policy.</summary>
 public sealed class RoomLifecycle<TClientId> where TClientId : notnull
@@ -70,39 +73,106 @@ public sealed class RoomLifecycle<TClientId> where TClientId : notnull
     public bool AllowLateJoin { get; init; }
     public string CurrentScene { get; private set; } = "default";
     public event Action<RoomSceneTransition>? SceneChanged;
+    public event Action<RoomLifecycleEvent<TClientId>>? LifecycleChanged;
     public IReadOnlyCollection<RoomMember<TClientId>> Members => this.members.Select(x => new RoomMember<TClientId>(x.Key, x.Value)).ToArray();
     public RoomLifecycle(int maxPlayers = 16) { if (maxPlayers < 2) throw new ArgumentOutOfRangeException(nameof(maxPlayers)); this.MaxPlayers = maxPlayers; }
     public bool Join(TClientId client)
     {
         if (this.members.ContainsKey(client)) return true;
         if (this.members.Count >= this.MaxPlayers || (this.Phase is not RoomPhase.Lobby and not RoomPhase.Ready && !this.AllowLateJoin)) return false;
-        this.members.Add(client, false); return true;
+        this.members.Add(client, false); this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.Joined, client, this.Phase, this.CurrentScene, 0)); return true;
     }
-    public bool Leave(TClientId client) => this.members.Remove(client);
+    public bool Leave(TClientId client)
+    {
+        if (!this.members.Remove(client)) return false;
+        this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.Left, client, this.Phase, this.CurrentScene, 0)); return true;
+    }
     public bool SetReady(TClientId client, bool ready)
     {
         if (this.Phase is not (RoomPhase.Lobby or RoomPhase.Ready) || !this.members.ContainsKey(client)) return false;
-        this.members[client] = ready; this.Phase = this.members.Count > 0 && this.members.Values.All(x => x) ? RoomPhase.Ready : RoomPhase.Lobby; return true;
+        this.members[client] = ready; this.Phase = this.members.Count > 0 && this.members.Values.All(x => x) ? RoomPhase.Ready : RoomPhase.Lobby;
+        this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.ReadyChanged, client, this.Phase, this.CurrentScene, 0)); return true;
     }
     public bool Start()
     {
         if (this.Phase != RoomPhase.Ready) return false;
-        this.Phase = RoomPhase.Starting; return true;
+        this.Phase = RoomPhase.Starting; this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.Started, default, this.Phase, this.CurrentScene, 0)); return true;
     }
-    public void BeginGame() { if (this.Phase != RoomPhase.Starting) throw new InvalidOperationException("Room must be starting."); this.Phase = RoomPhase.InGame; }
+    public void BeginGame() { if (this.Phase != RoomPhase.Starting) throw new InvalidOperationException("Room must be starting."); this.Phase = RoomPhase.InGame; this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.GameBegan, default, this.Phase, this.CurrentScene, 0)); }
     public bool TransitionScene(string scene, uint tick)
     {
         if (string.IsNullOrWhiteSpace(scene) || this.Phase is RoomPhase.Ended or RoomPhase.Draining || string.Equals(scene, this.CurrentScene, StringComparison.Ordinal)) return false;
-        string previous = this.CurrentScene; this.CurrentScene = scene; this.SceneChanged?.Invoke(new(previous, scene, tick)); return true;
+        string previous = this.CurrentScene; this.CurrentScene = scene; this.SceneChanged?.Invoke(new(previous, scene, tick)); this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.SceneChanged, default, this.Phase, scene, tick)); return true;
     }
-    public void Drain() { if (this.Phase is RoomPhase.Ended or RoomPhase.Draining) return; this.Phase = RoomPhase.Draining; }
-    public void Ended() => this.Phase = RoomPhase.Ended;
+    public void Drain() { if (this.Phase is RoomPhase.Ended or RoomPhase.Draining) return; this.Phase = RoomPhase.Draining; this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.Draining, default, this.Phase, this.CurrentScene, 0)); }
+    public void Ended() { if (this.Phase == RoomPhase.Ended) return; this.Phase = RoomPhase.Ended; this.LifecycleChanged?.Invoke(new(RoomLifecycleEventKind.Ended, default, this.Phase, this.CurrentScene, 0)); }
+
+    public RoomStateSnapshot<TClientId> Snapshot(NetworkObjectRegistry<TClientId> registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        return new(this.Phase, this.CurrentScene, this.Members, registry.Objects);
+    }
+}
+
+/// <summary>Composes room membership, authoritative object identity, and late-join snapshots.</summary>
+public sealed class RoomSessionCoordinator<TClientId> where TClientId : notnull
+{
+    public RoomLifecycle<TClientId> Room { get; }
+    public NetworkObjectRegistry<TClientId> Objects { get; }
+    public event Action<RoomLifecycleEvent<TClientId>>? LifecycleChanged;
+    public RoomSessionCoordinator(RoomLifecycle<TClientId> room, NetworkObjectRegistry<TClientId> objects)
+    {
+        Room = room ?? throw new ArgumentNullException(nameof(room)); Objects = objects ?? throw new ArgumentNullException(nameof(objects));
+        Room.LifecycleChanged += e => LifecycleChanged?.Invoke(e);
+    }
+    public bool Join(TClientId client) => Room.Join(client);
+    public bool Leave(TClientId client) => Room.Leave(client);
+    public bool SetReady(TClientId client, bool ready) => Room.SetReady(client, ready);
+    public bool Start() => Room.Start();
+    public void BeginGame() => Room.BeginGame();
+    public bool TransitionScene(string scene, uint tick) => Room.TransitionScene(scene, tick);
+    public void Drain() => Room.Drain();
+    public void End() => Room.Ended();
+    public RoomStateSnapshot<TClientId> GetLateJoinState(TClientId client)
+    {
+        if (!Room.Members.Any(x => EqualityComparer<TClientId>.Default.Equals(x.Client, client))) throw new InvalidOperationException("Client is not a room member.");
+        if (Room.Phase is not (RoomPhase.Starting or RoomPhase.InGame)) throw new InvalidOperationException("Late-join state is available only after the room starts.");
+        return Room.Snapshot(Objects);
+    }
 }
 
 public enum RpcAuthority { ServerOnly, OwnerOnly, AnyAuthenticated }
 public readonly record struct RpcEndpointCapability(string Endpoint, RpcAuthority Authority);
 public readonly record struct RpcRequest(Guid RequestId, string Endpoint, long? ObjectId, string Caller, byte[] Payload, uint Tick);
 public readonly record struct RpcResponse(Guid RequestId, bool Accepted, byte[]? Payload, string? Error = null);
+
+[MemoryPackable]
+public partial record RpcRequestEnvelope(Guid RequestId, string Endpoint, long? ObjectId, byte[] Payload);
+[MemoryPackable]
+public partial record RpcResponseEnvelope(Guid RequestId, bool Accepted, byte[]? Payload, string? Error);
+
+/// <summary>Routes server-originated RPC invocations to registered client handlers.</summary>
+public sealed class ClientRpcRouter
+{
+    private readonly Dictionary<byte, (string Endpoint, Action<RpcRequestEnvelope, uint> Handler)> handlers = new();
+    public void Register<T>(byte opcode, string endpoint, Action<RpcRequestEnvelope, T, uint> handler) where T : IMemoryPackable<T>
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) throw new ArgumentException("Endpoint is required.", nameof(endpoint));
+        ArgumentNullException.ThrowIfNull(handler);
+        if (!this.handlers.TryAdd(opcode, (endpoint, (request, tick) =>
+        {
+            T command = NetSerializer.Deserialize<T>(request.Payload) ?? throw new InvalidDataException("Invalid client RPC payload.");
+            handler(request, command, tick);
+        }))) throw new InvalidOperationException($"Client RPC opcode {opcode} is already registered.");
+    }
+    public bool Dispatch(byte opcode, uint tick, RpcRequestEnvelope request)
+    {
+        if (!this.handlers.TryGetValue(opcode, out (string Endpoint, Action<RpcRequestEnvelope, uint> Handler) handler) ||
+            !string.Equals(handler.Endpoint, request.Endpoint, StringComparison.Ordinal)) return false;
+        try { handler.Handler(request, tick); return true; }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException or MemoryPackSerializationException) { return false; }
+    }
+}
 
 /// <summary>Registers gameplay commands/RPCs with explicit authority and correlated responses.</summary>
 public sealed class RpcRouter

@@ -12,9 +12,9 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Verify ordering and duplicate suppression during replay.
   - [x] Automatically feed registered host/registry lifecycle events into the session journal.
   - [x] Send a complete initial object graph when the journal retention window is exceeded.
-- [x] M1.2 Complete command/RPC framework
+- [~] M1.2 Complete command/RPC framework
   - [x] Add typed MemoryPack command contracts.
-  - [x] Add targeted client routing.
+  - [x] Add targeted client routing for server-originated RPC invocations and state delivery.
   - [x] Add request timeout and expiry handling.
   - [x] Add endpoint capability discovery.
 - [x] M1.3 Room/scene lifecycle integration
@@ -32,7 +32,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Generate schema compatibility metadata.
 - [ ] M2.2 Caller-free automatic replication tick
   - [x] Integrate lifecycle records with AOI/delta/batching.
-  - [~] Automatically schedule dirty components (automatic world/snapshot tick scheduling is integrated; component-level dirty tracking remains open).
+  - [x] Automatically schedule dirty components through per-component fingerprints during snapshot ticks.
   - [x] Select channel and priority without per-message caller plumbing.
 - [ ] M2.3 Automatic budgets and shed accounting
   - [x] Integrate byte/message budgets into scheduler.
@@ -48,11 +48,10 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Store input/state/simulation metadata per tick.
   - [x] Rewind and resimulate a complete sample world.
   - [x] Apply correction smoothing to rendered state.
-- [x] M3.2 Clock/tick policy integration
+- [ ] M3.2 Clock/tick policy integration
   - [x] Apply measured drift to synchronization policy.
   - [x] Integrate bounded catch-up/slow-down into TickLoop.
   - [x] Expose prediction cost and misprediction magnitude.
-  - [x] Propagate clock samples, drift-adjusted pacing, and correction metrics through the predicted-client facade.
 - [x] M3.3 Impairment and long-rollback tests
   - [x] Test latency, jitter, packet loss, and duplicate snapshots.
   - [x] Test clock drift and long rollback windows.
@@ -77,6 +76,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Linux Docker native build and loopback verification.
   - [ ] Windows native runtime verification.
   - [ ] Authenticated native CI client/server run.
+  - [x] Explicitly gate the development loopback harness behind `--insecure` and publish a no-secrets auth capability report.
 - [ ] M5.3 Native CI artifacts
   - [x] Cache native dependencies.
   - [x] Publish and consume Linux/Windows artifacts in CI.
@@ -84,15 +84,15 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M6 — Developer experience and operations
 
-- [ ] M6.1 Generated docs/templates
-  - [ ] Generate API/reference documentation.
+- [x] M6.1 Generated docs/templates
+  - [x] Generate API/reference documentation from public XML docs.
   - [x] Add server, client, room, entity, and auth-adapter templates.
 - [ ] M6.2 Observability
   - [x] Add OpenTelemetry dashboards.
   - [x] Add player-facing overlay integration.
 - [ ] M6.3 Replay and load testing
   - [x] Add persistent replay index and metadata.
-  - [~] Add redaction and deterministic playback environments (redaction and deterministic playback are integrated; isolated environment orchestration remains open).
+  - [x] Add redaction and deterministic playback environments (deterministic replay fingerprint and CI verification are integrated; isolated environment orchestration remains open).
   - [x] Add CI replay regression captures.
   - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (CI now runs a high-cardinality smoke profile; a full matrix remains open).
 - [ ] M6.4 Release compatibility

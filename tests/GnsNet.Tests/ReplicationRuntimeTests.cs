@@ -49,6 +49,36 @@ public sealed partial class ReplicationRuntimeTests
     }
 
     [Fact]
+    public void RoomSessionCoordinator_IntegratesMembershipReadinessScenesAndLateJoinState()
+    {
+        var room = new RoomLifecycle<string>(3) { AllowLateJoin = true };
+        var objects = new NetworkObjectRegistry<string>(); NetworkObjectDescriptor entity = objects.Spawn(7, "owner", 4);
+        var coordinator = new RoomSessionCoordinator<string>(room, objects); var events = new List<RoomLifecycleEvent<string>>(); coordinator.LifecycleChanged += events.Add;
+        Assert.True(coordinator.Join("owner")); Assert.True(coordinator.SetReady("owner", true));
+        Assert.True(coordinator.Start()); coordinator.BeginGame(); Assert.True(coordinator.TransitionScene("arena", 9));
+        Assert.True(coordinator.Join("late")); RoomStateSnapshot<string> snapshot = coordinator.GetLateJoinState("late");
+        Assert.Equal(RoomPhase.InGame, snapshot.Phase); Assert.Equal("arena", snapshot.Scene); Assert.Contains(entity, snapshot.Objects);
+        Assert.Equal(new[] { RoomLifecycleEventKind.Joined, RoomLifecycleEventKind.ReadyChanged, RoomLifecycleEventKind.Started, RoomLifecycleEventKind.GameBegan, RoomLifecycleEventKind.SceneChanged, RoomLifecycleEventKind.Joined }, events.Select(x => x.Kind));
+        Assert.True(coordinator.Leave("late")); Assert.Equal(RoomLifecycleEventKind.Left, events[^1].Kind);
+    }
+
+    [Fact]
+    public void RoomSessionCoordinator_RejectsLateJoinSnapshotBeforeGameAndUnknownClients()
+    {
+        var coordinator = new RoomSessionCoordinator<string>(new RoomLifecycle<string>(), new NetworkObjectRegistry<string>());
+        Assert.True(coordinator.Join("p")); Assert.Throws<InvalidOperationException>(() => coordinator.GetLateJoinState("p"));
+        Assert.Throws<InvalidOperationException>(() => coordinator.GetLateJoinState("unknown"));
+    }
+
+    [Fact]
+    public void RoomLifecycle_EmitsAuthoritativeEventsForDrainAndEndOnlyOnce()
+    {
+        var room = new RoomLifecycle<string>(); var events = new List<RoomLifecycleEvent<string>>(); room.LifecycleChanged += events.Add;
+        room.Drain(); room.Drain(); room.Ended(); room.Ended();
+        Assert.Equal(new[] { RoomLifecycleEventKind.Draining, RoomLifecycleEventKind.Ended }, events.Select(x => x.Kind));
+    }
+
+    [Fact]
     public void RpcRouter_EnforcesAuthorityAndCorrelatesResponse()
     {
         var router = new RpcRouter(); router.SetOwner(4, "alice");
@@ -66,6 +96,35 @@ public sealed partial class ReplicationRuntimeTests
         Guid id = Guid.NewGuid(); RpcResponse response = router.Dispatch(new(id, "rename", null, "client", NetSerializer.Serialize(new RenameCommand("new-name")), 1));
         Assert.True(response.Accepted); Assert.Equal(new RenameReply(true, "new-name"), NetSerializer.Deserialize<RenameReply>(response.Payload!));
         Assert.False(router.Dispatch(new(id, "rename", null, "client", [1, 2], 1)).Accepted);
+    }
+
+    [Fact]
+    public void RpcTransportEnvelopes_RoundTripAndPreserveCorrelation()
+    {
+        Guid requestId = Guid.NewGuid(); var request = new RpcRequestEnvelope(requestId, "rename", 12, [4, 5]);
+        RpcRequestEnvelope decodedRequest = NetSerializer.Deserialize<RpcRequestEnvelope>(NetSerializer.Serialize(request))!;
+        Assert.Equal(request.RequestId, decodedRequest.RequestId); Assert.Equal(request.Endpoint, decodedRequest.Endpoint); Assert.Equal(request.ObjectId, decodedRequest.ObjectId); Assert.Equal(request.Payload, decodedRequest.Payload);
+        var response = new RpcResponseEnvelope(requestId, false, null, "denied");
+        RpcResponseEnvelope decodedResponse = NetSerializer.Deserialize<RpcResponseEnvelope>(NetSerializer.Serialize(response))!;
+        Assert.Equal(response.RequestId, decodedResponse.RequestId); Assert.Equal(response.Accepted, decodedResponse.Accepted); Assert.Equal(response.Error, decodedResponse.Error); Assert.Null(decodedResponse.Payload);
+    }
+
+    [Fact]
+    public void ClientRpcRouter_DispatchesOnlyMatchingTargetInvocation()
+    {
+        var router = new ClientRpcRouter(); string? received = null; uint receivedTick = 0;
+        router.Register<RenameCommand>(42, "client.rename", (request, command, tick) => { received = command.Name; receivedTick = tick; });
+        var invocation = new RpcRequestEnvelope(Guid.NewGuid(), "client.rename", null, NetSerializer.Serialize(new RenameCommand("target-only")));
+        Assert.True(router.Dispatch(42, 99, invocation)); Assert.Equal("target-only", received); Assert.Equal((uint)99, receivedTick);
+        Assert.False(router.Dispatch(42, 100, invocation with { Endpoint = "other" }));
+        Assert.False(router.Dispatch(43, 100, invocation));
+    }
+
+    [Fact]
+    public void ClientRpcRouter_RejectsMalformedTargetInvocation()
+    {
+        var router = new ClientRpcRouter(); router.Register<RenameCommand>(42, "client.rename", (_, _, _) => { });
+        Assert.False(router.Dispatch(42, 1, new RpcRequestEnvelope(Guid.NewGuid(), "client.rename", null, [1, 2, 3])));
     }
 
     [Fact]

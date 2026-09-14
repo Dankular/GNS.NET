@@ -21,6 +21,7 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     private readonly HashSet<uint> gracefullyClosed = new();
     private readonly HashSet<uint> heartbeatTimedOut = new();
     private readonly Dictionary<byte, Action<TSessionId, NetFrame>> snapshotAcknowledgers = new();
+    private readonly Dictionary<byte, (RpcRouter Router, byte ResponseOpcode)> rpcRoutes = new();
     private readonly Dictionary<uint, HeartbeatTracker> heartbeatTrackers = new();
     private readonly Dictionary<uint, DateTimeOffset> heartbeatSentAt = new();
     private NetworkObjectRegistry<TSessionId>? lifecycleRegistry;
@@ -51,6 +52,14 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     public ValidatedInputRouter<TSessionId> InputRouter { get; } = new();
     public event Action<GnsConnection, NetFrame>? FrameReceived;
     public event Action<TSessionId, DisconnectInfo>? SessionDisconnected;
+    /// <summary>Wires an RPC router to a request opcode and sends correlated responses reliably.</summary>
+    public void RegisterRpc(byte requestOpcode, byte responseOpcode, RpcRouter router)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        if (IsControlOpcode(requestOpcode) || IsControlOpcode(responseOpcode) || requestOpcode == responseOpcode)
+            throw new ArgumentException("RPC opcodes must be distinct application opcodes.");
+        if (!this.rpcRoutes.TryAdd(requestOpcode, (router, responseOpcode))) throw new InvalidOperationException($"RPC opcode {requestOpcode} is already registered.");
+    }
     public void RegisterInput<TInput>(byte opcode, ServerInputGuard<TSessionId, TInput> guard, Func<TSessionId, TInput, bool> handler) where TInput : IMemoryPackable<TInput>
         => this.InputRouter.Register(opcode, guard, handler);
     public void RegisterAuthoritativeInput<TState, TInput>(byte opcode, ServerInputGuard<TSessionId, TInput> guard, AuthoritativeServer<TSessionId, TState, TInput> simulation, Action<TSessionId, TInput>? accepted = null)
@@ -133,9 +142,9 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
             {
                 if (message.Data.Length > 0 && message.Data[0] == NetBatch.Magic)
                 {
-                    foreach (NetFrame frame in NetBatch.Decode(message.Data)) { if (this.AcceptFrame(message.Connection, frame)) { if (this.connectionSessions.TryGetValue(message.Connection.Handle.Handle, out TSessionId? id) && this.InputRouter.IsRegistered(frame.Opcode)) { _ = this.InputRouter.Dispatch(id, frame); } else { this.FrameReceived?.Invoke(message.Connection, frame); this.Router.Dispatch(frame); } count++; } }
+                    foreach (NetFrame frame in NetBatch.Decode(message.Data)) { if (this.AcceptFrame(message.Connection, frame) && this.DispatchApplicationFrame(message.Connection, frame)) count++; }
                 }
-                else { NetFrame frame = NetFrame.Decode(message.Data); if (this.AcceptFrame(message.Connection, frame)) { if (this.connectionSessions.TryGetValue(message.Connection.Handle.Handle, out TSessionId? id) && this.InputRouter.IsRegistered(frame.Opcode)) { _ = this.InputRouter.Dispatch(id, frame); } else { this.FrameReceived?.Invoke(message.Connection, frame); this.Router.Dispatch(frame); } count++; } }
+                else { NetFrame frame = NetFrame.Decode(message.Data); if (this.AcceptFrame(message.Connection, frame) && this.DispatchApplicationFrame(message.Connection, frame)) count++; }
             }
             catch (Exception exception) when (exception is InvalidDataException or ArgumentException or OverflowException)
             { this.server.Reject(message.Connection, "Malformed network frame"); }
@@ -144,6 +153,21 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
         this.Heartbeats?.Poll();
         this.SendHeartbeatProbes();
         return count;
+    }
+    private bool DispatchApplicationFrame(GnsConnection connection, NetFrame frame)
+    {
+        uint handle = connection.Handle.Handle;
+        if (this.connectionSessions.TryGetValue(handle, out TSessionId? id) && this.rpcRoutes.TryGetValue(frame.Opcode, out (RpcRouter Router, byte ResponseOpcode) route))
+        {
+            RpcRequestEnvelope envelope = NetSerializer.Deserialize<RpcRequestEnvelope>(frame.Payload) ?? throw new InvalidDataException("Invalid RPC request envelope.");
+            RpcResponse response = route.Router.Dispatch(new RpcRequest(envelope.RequestId, envelope.Endpoint, envelope.ObjectId, id.ToString() ?? string.Empty, envelope.Payload, frame.Tick));
+            byte[] payload = NetSerializer.Serialize(new RpcResponseEnvelope(response.RequestId, response.Accepted, response.Payload, response.Error));
+            byte[] data = new NetFrame(route.ResponseOpcode, frame.Tick, payload).Encode();
+            EResult result = this.server.Send(connection, data, ESteamNetworkingSendType.Reliable); this.RecordOutbound(connection, data, ESteamNetworkingSendType.Reliable, result == EResult.OK);
+            return true;
+        }
+        if (this.connectionSessions.TryGetValue(handle, out id) && this.InputRouter.IsRegistered(frame.Opcode)) { _ = this.InputRouter.Dispatch(id, frame); return true; }
+        this.FrameReceived?.Invoke(connection, frame); this.Router.Dispatch(frame); return true;
     }
     private void SendHeartbeatProbes()
     {
@@ -206,6 +230,14 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
         => this.Sessions.TryGet(session, out GnsConnection? connection) && connection is not null
             ? this.Send(connection, opcode, tick, message, sendType)
             : EResult.InvalidParam;
+    /// <summary>Sends a server-originated typed RPC invocation to exactly one active session.</summary>
+    public EResult SendRpcTo<T>(TSessionId session, byte opcode, uint tick, string endpoint, long? objectId, T command)
+        where T : IMemoryPackable<T>
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) throw new ArgumentException("Endpoint is required.", nameof(endpoint));
+        var request = new RpcRequestEnvelope(Guid.NewGuid(), endpoint, objectId, NetSerializer.Serialize(command));
+        return this.SendTo(session, opcode, tick, request, ESteamNetworkingSendType.Reliable);
+    }
     private void RecordOutbound(GnsConnection connection, byte[] data, ESteamNetworkingSendType sendType, bool delivered)
     { this.Metrics.RecordOut(data.Length, delivered); this.MetricsByConnection.GetOrAdd(connection.Handle.Handle, _ => new()).RecordOut(data.Length, delivered); if (delivered) GnsTelemetry.RecordOutbound(data.Length, connection.Handle.Handle.ToString()); else GnsTelemetry.RecordDrop(connection.Handle.Handle.ToString()); this.Recorder?.Record(true, data, connectionId: connection.Handle.Handle.ToString(), channel: sendType == ESteamNetworkingSendType.Reliable ? NetChannel.Event : NetChannel.State); }
     public void Broadcast<T>(byte opcode, uint tick, T message, ESteamNetworkingSendType sendType)
@@ -260,6 +292,7 @@ public sealed class GnsClientHost
     private readonly CancellationTokenSource heartbeatCts = new();
     private Task? heartbeatLoop;
     private readonly HeartbeatTracker heartbeatTracker = new();
+    public RpcRequestTracker RpcRequests { get; } = new();
     public NetworkConditionSimulator? Conditions { get; init; }
     public NetworkRecorder? Recorder { get; init; }
     public ConnectionMetrics Metrics { get; } = new();
@@ -271,7 +304,26 @@ public sealed class GnsClientHost
         this.transport.Connected += _ => { if (this.token is not null) this.transport.TrySend(new NetFrame(GnsServerHost<string>.HandshakeOpcode, 0, Encoding.UTF8.GetBytes(this.token)).Encode(), NetChannel.Event.SendType()); };
     }
     public NetMessageRouter Router { get; } = new();
+    public ClientRpcRouter ClientRpc { get; } = new();
     public event Action<NetFrame>? FrameReceived;
+    /// <summary>Registers the response side of a correlated RPC channel.</summary>
+    public void RegisterRpcResponse(byte opcode)
+    {
+        if (!this.rpcResponseOpcodes.Add(opcode)) return;
+        this.Router.Register<RpcResponseEnvelope>(opcode, (envelope, _) => this.RpcRequests.Complete(new RpcResponse(envelope.RequestId, envelope.Accepted, envelope.Payload, envelope.Error)));
+    }
+    /// <summary>Sends a typed RPC request and completes when the server response arrives or expires.</summary>
+    public Task<RpcResponse> SendRpc<T>(byte requestOpcode, byte responseOpcode, string endpoint, long? objectId, uint tick, T command, TimeSpan timeout, CancellationToken cancellationToken = default)
+        where T : IMemoryPackable<T>
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) throw new ArgumentException("Endpoint is required.", nameof(endpoint));
+        if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
+        if (!this.RouterHasResponse(responseOpcode)) this.RegisterRpcResponse(responseOpcode);
+        (Guid RequestId, Task<RpcResponse> Completion) pending = this.RpcRequests.Create(timeout, cancellationToken);
+        bool sent = this.Send(requestOpcode, tick, new RpcRequestEnvelope(pending.RequestId, endpoint, objectId, NetSerializer.Serialize(command)), NetChannel.Event.SendType());
+        if (!sent) this.RpcRequests.Cancel(pending.RequestId);
+        return pending.Completion;
+    }
     public int Poll()
     {
         int count = 0;
@@ -327,6 +379,23 @@ public sealed class GnsClientHost
             byte[] acknowledgement = new NetFrame(GnsServerHost<string>.HeartbeatAckOpcode, frame.Tick, frame.Payload).Encode(); bool ok = this.transport.TrySend(acknowledgement, NetChannel.Event.SendType()); this.Metrics.RecordOut(acknowledgement.Length, ok); this.Recorder?.Record(true, acknowledgement, connectionId: "client", channel: NetChannel.Event); return false;
         }
         if (frame.Opcode == GnsServerHost<string>.HeartbeatAckOpcode) return this.heartbeatTracker.Acknowledge(frame.Payload, this.Metrics);
+        if (this.TryDispatchClientRpc(frame)) return true;
         this.FrameReceived?.Invoke(frame); this.Router.Dispatch(frame); return true;
     }
+    private bool TryDispatchClientRpc(NetFrame frame)
+    {
+        try
+        {
+            RpcRequestEnvelope? request = NetSerializer.Deserialize<RpcRequestEnvelope>(frame.Payload);
+            return request is not null && this.ClientRpc.Dispatch(frame.Opcode, frame.Tick, request);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException or MemoryPackSerializationException) { return false; }
+    }
+    private bool RouterHasResponse(byte opcode)
+    {
+        // Registration is intentionally attempted only once per response opcode. The router has no
+        // public capability query for raw opcodes, so this local set is the authoritative client view.
+        return this.rpcResponseOpcodes.Contains(opcode);
+    }
+    private readonly HashSet<byte> rpcResponseOpcodes = new();
 }
