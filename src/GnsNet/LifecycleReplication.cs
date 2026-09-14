@@ -23,6 +23,35 @@ public sealed class LifecycleReplicationScheduler<TClientId> where TClientId : n
     /// <summary>Registers the AOI query used to refresh every observer set during <see cref="Tick"/>.</summary>
     public void ConfigureAutomaticVisibility(Func<TClientId, IEnumerable<long>> provider)
         => this.visibilityProvider = provider ?? throw new ArgumentNullException(nameof(provider));
+    /// <summary>
+    /// Configures automatic visibility from a spatial AOI and authoritative scene/team/owner
+    /// policy. The world is rebuilt before each observer query so lifecycle enter/leave records
+    /// follow the same filters used by gameplay replication.
+    /// </summary>
+    public void ConfigureAutomaticVisibility<TEntity>(
+        SpatialHashInterestManager<TClientId, TEntity> interest,
+        Func<IEnumerable<TEntity>> world,
+        Func<TEntity, long> objectId,
+        Func<TEntity, (float X, float Y)> position,
+        Func<TEntity, string?> scene,
+        Func<TEntity, string?> team,
+        Func<TEntity, string?> owner,
+        Func<TClientId, string?> clientScene,
+        Func<TClientId, string?> clientTeam,
+        Func<TClientId, string?> clientOwner,
+        Func<TEntity, bool>? visibility = null,
+        Func<TEntity, bool>? occlusion = null)
+    {
+        ArgumentNullException.ThrowIfNull(interest); ArgumentNullException.ThrowIfNull(world); ArgumentNullException.ThrowIfNull(objectId);
+        ArgumentNullException.ThrowIfNull(position); ArgumentNullException.ThrowIfNull(scene); ArgumentNullException.ThrowIfNull(team);
+        ArgumentNullException.ThrowIfNull(owner); ArgumentNullException.ThrowIfNull(clientScene); ArgumentNullException.ThrowIfNull(clientTeam); ArgumentNullException.ThrowIfNull(clientOwner);
+        this.ConfigureAutomaticVisibility(client =>
+        {
+            TEntity[] snapshot = world().ToArray();
+            interest.Rebuild(snapshot, position);
+            return interest.Cull(client, position, scene, team, owner, clientScene(client), clientTeam(client), clientOwner(client), visibility, occlusion).Select(objectId);
+        });
+    }
     /// <summary>Runs the AOI pass and automatically delivers observer enter/leave lifecycle records.</summary>
     public void Tick(uint tick)
     {

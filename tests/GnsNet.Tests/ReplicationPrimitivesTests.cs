@@ -305,6 +305,39 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void LifecycleScheduler_IntegratesSpatialSceneTeamOwnerAndVisibilityFilters()
+    {
+        var registry = new NetworkObjectRegistry<string>();
+        var scheduler = new LifecycleReplicationScheduler<string>(registry, 90, change => [(byte)change.Kind, (byte)change.Object.ObjectId]);
+        scheduler.AddClient("alice");
+        var interest = new SpatialHashInterestManager<string, AoiEntity>(); interest.SetView("alice", new(0, 0, 20));
+        NetworkObjectDescriptor allowed = registry.Spawn(1, "alice", 1);
+        NetworkObjectDescriptor wrongTeam = registry.Spawn(1, "alice", 1);
+        NetworkObjectDescriptor hidden = registry.Spawn(1, "alice", 1);
+        var world = new List<AoiEntity>
+        {
+            new(allowed.ObjectId, 0, 0, "arena", "red", "alice", true),
+            new(wrongTeam.ObjectId, 1, 0, "arena", "blue", "alice", true),
+            new(hidden.ObjectId, 2, 0, "arena", "red", "alice", false)
+        };
+        scheduler.ConfigureAutomaticVisibility(interest, () => world, x => x.ObjectId, x => (x.X, x.Y), x => x.Scene, x => x.Team, x => x.Owner,
+            _ => "arena", _ => "red", _ => "alice", x => x.Visible);
+
+        scheduler.Tick(2);
+        var spawn = Assert.Single(scheduler.Drain("alice", 10));
+        Assert.Equal((byte)NetworkObjectChangeKind.Spawned, spawn.Frame.Payload[0]);
+        Assert.Equal((byte)allowed.ObjectId, spawn.Frame.Payload[1]);
+
+        world[0] = world[0] with { Visible = false };
+        scheduler.Tick(3);
+        var despawn = Assert.Single(scheduler.Drain("alice", 10));
+        Assert.Equal((byte)NetworkObjectChangeKind.Despawned, despawn.Frame.Payload[0]);
+        Assert.Equal((byte)allowed.ObjectId, despawn.Frame.Payload[1]);
+    }
+
+    private readonly record struct AoiEntity(long ObjectId, float X, float Y, string Scene, string Team, string Owner, bool Visible);
+
+    [Fact]
     public void RewindAuthorization_ClampsOnlyWithinServerWindowAndRejectsFuture()
     {
         var auth = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UtcNow;
