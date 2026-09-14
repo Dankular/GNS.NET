@@ -11,7 +11,7 @@ in the deployment environment, then run:
 docker compose --env-file turn.env -f docker/turn-compose.yml up -d
 ```
 
-Open UDP/TCP 3478 and UDP 49152–49252 in the VPS firewall/security group. The relay
+Open UDP/TCP 3478 and UDP 49152-49252 in the VPS firewall/security group. The relay
 pool should be published by the GS/matchmaker signaling endpoint as short-lived
 `P2PRelayEndpoint` values. `TurnCredentialRotator` derives coturn-compatible
 `expiry:user` usernames and HMAC-SHA1 credentials; clients receive only those derived
