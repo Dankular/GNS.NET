@@ -160,6 +160,35 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void M1ExitCriterion_AuthenticatedReconnectRebuildsOwnedObjectGraphAndDispatchesRpc()
+    {
+        var tokenService = new ConnectTokenService(new byte[32]);
+        var admission = new ConnectionAdmission(tokenService);
+        string token = tokenService.Issue("player", TimeSpan.FromMinutes(1), DateTimeOffset.UnixEpoch);
+        Assert.True(admission.TryAdmit(token, out ConnectClaims claims));
+
+        var sessions = new ServerSessionRegistry<string>(TimeSpan.FromMinutes(1));
+        var firstConnection = new GnsConnection(default); Assert.False(sessions.Attach(claims.SessionId, firstConnection, DateTimeOffset.UnixEpoch));
+        var authoritative = new NetworkObjectRegistry<string>(); NetworkObjectDescriptor spawned = authoritative.Spawn(7, claims.SessionId, 1);
+        sessions.Rehydration.Record(claims.SessionId, new(NetworkObjectChangeKind.Spawned, spawned));
+        NetworkObjectDescriptor transferred = spawned with { OwnerId = "server" };
+        sessions.Rehydration.Record(claims.SessionId, new(NetworkObjectChangeKind.OwnershipTransferred, transferred, claims.SessionId));
+
+        sessions.Detach(claims.SessionId, DateTimeOffset.UnixEpoch.AddSeconds(1)); Assert.True(admission.Release(claims.Nonce));
+        Assert.True(admission.TryAdmit(token, out ConnectClaims resumedClaims));
+        Assert.Equal(claims.SessionId, resumedClaims.SessionId);
+        Assert.True(sessions.Attach(resumedClaims.SessionId, new GnsConnection(default), DateTimeOffset.UnixEpoch.AddSeconds(2)));
+
+        var rebuilt = new NetworkObjectRegistry<string>();
+        foreach (NetworkObjectChange change in sessions.Rehydration.Snapshot(resumedClaims.SessionId)) Assert.True(rebuilt.Apply(change));
+        Assert.True(rebuilt.TryGet(spawned.ObjectId, out NetworkObjectDescriptor rebuiltObject)); Assert.Equal("server", rebuiltObject.OwnerId);
+
+        var rpc = new RpcRouter(); rpc.Register("player.ready", RpcAuthority.AnyAuthenticated, request => new(request.RequestId, true, request.Payload));
+        RpcResponse response = rpc.Dispatch(new(Guid.NewGuid(), "player.ready", spawned.ObjectId, resumedClaims.SessionId, [1], 2));
+        Assert.True(response.Accepted); Assert.Equal(new byte[] { 1 }, response.Payload);
+    }
+
+    [Fact]
     public void SessionRehydration_ReplaysReconnectDuringSpawnSequenceInOrder()
     {
         var buffer = new SessionRehydrationBuffer<string>(); var client = new NetworkObjectRegistry<string>();
