@@ -142,6 +142,15 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void SessionRehydration_ReplaysOrderedLifecycleIdempotentlyAndClearsOnGracefulRemoval()
+    {
+        var sessions = new ServerSessionRegistry<string>(TimeSpan.FromMinutes(1)); var server = new NetworkObjectRegistry<string>(); var client = new NetworkObjectRegistry<string>();
+        NetworkObjectDescriptor entity = server.Spawn(3, "player", 10); sessions.Rehydration.Record("s", new(NetworkObjectChangeKind.Spawned, entity));
+        Assert.Equal(1, sessions.Rehydration.Replay("s", client)); Assert.Equal(1, sessions.Rehydration.Replay("s", client)); Assert.Single(client.Objects);
+        sessions.Rehydration.Clear("s"); Assert.Empty(sessions.Rehydration.Snapshot("s"));
+    }
+
+    [Fact]
     public void Heartbeat_SeparatesGameTimeoutFromTransport()
     {
         var monitor = new HeartbeatMonitor<string>(TimeSpan.FromSeconds(5));
