@@ -59,6 +59,17 @@ public sealed class GnsRuntime : IDisposable, IAsyncDisposable
             throw new InvalidOperationException($"GameNetworkingSockets_Init failed: {errMsg}");
         }
 
+        if (options.NativeCertificate is { Length: > 0 } certificate)
+        {
+            try { NativeAuthentication.SetCertificate(ISteamNetworkingSockets.User!, certificate); }
+            catch
+            {
+                GameNetworkingSockets.Kill();
+                System.Runtime.InteropServices.NativeLibrary.Free(nativeLibrary);
+                throw;
+            }
+        }
+
         if (options.RequireNativeAuthentication)
         {
             ESteamNetworkingAvailability availability = ISteamNetworkingSockets.User!.InitAuthentication();

@@ -34,5 +34,9 @@ public sealed class GnsRuntimeOptions
     public GnsImpairmentOptions? Impairment { get; init; }
     public GnsP2POptions? P2P { get; init; }
 
+    /// <summary>Optional coordinator-issued SteamDatagram certificate blob for native GNS authentication.</summary>
+    /// <remarks>The blob is secret material. Load it from a secret store or file; never commit it.</remarks>
+    public byte[]? NativeCertificate { get; init; }
+
     public bool RequireNativeAuthentication { get; init; } = true;
 }

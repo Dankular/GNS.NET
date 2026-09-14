@@ -11,9 +11,27 @@ AOI/delta/priority snapshot delivery, diagnostics, replay, scaling, and backend/
 High-level frames carry both protocol and MemoryPack schema revisions and reject unsupported revisions
 before deserialization.
 
-The forward-looking capability roadmap and comparison against Unity Netcode, Photon Fusion, FishNet,
-Mirror, Unreal Iris, Godot, and Valve GNS is in [MILESTONES.md](MILESTONES.md). It separates the
-implemented primitives from the remaining higher-level replication runtime work.
+## Companion GameService
+
+GNS.NET is the realtime game-networking layer in the companion
+[GameService](https://github.com/Dankular/GS) platform. GameService owns Nakama identity,
+matchmaking, Agones allocation, match state, and short-lived Ed25519-signed join claims.
+GNS.NET owns the allocated server's gameplay transport: connection admission, authoritative
+simulation, replication, prediction, reconnect grace, AOI, lag compensation, metrics, and replay.
+
+The intended production flow is:
+
+`Nakama session → matchmaking ticket → Agones allocation → GameService join claim → game-server claim validation → GNS.NET admission token → realtime connection`
+
+The join claim is not sent as an arbitrary UDP credential. The game server validates its
+match, allocation, build, roster, slot, and expiry constraints first, then issues a separate
+short-lived GNS.NET connection token. See [GameService integration](docs/gameservice-integration.md)
+for the boundary and example flow. The GameService repository is the source of truth for
+control-plane APIs; this repository is the source of truth for realtime gameplay APIs.
+
+The audited capability roadmap and comparison against Unity Netcode, Photon Fusion, FishNet,
+Mirror, Unreal Iris, Godot, and Valve GNS is in [MILESTONES.md](MILESTONES.md). It distinguishes
+implemented and tested framework behavior from external validation and remaining work.
 
 ## What's in `GnsNet`
 
@@ -478,6 +496,36 @@ restarting dead local shard processes; deployment systems may still provide an o
 host-machine failures. The managed P2P/ICE entry points are present, but the pinned GnsSharp/GNS
 native commit documents broken P2P support; use an updated native GNS build to validate traversal.
 See [`TODO.md`](TODO.md).
+
+### Native GNS certificates and game join claims
+
+The open-source GnsSharp binding exposes native certificate provisioning, so a coordinator can
+issue a SteamDatagram certificate from a certificate request and install it before authentication:
+
+```csharp
+using GnsSharp;
+
+var sockets = ISteamNetworkingSockets.User!;
+byte[] request = NativeAuthentication.CreateCertificateRequest(sockets);
+// Send request to the trusted game coordinator. Keep the returned certificate secret.
+byte[] certificate = await coordinator.IssueCertificateAsync(request);
+NativeAuthentication.SetCertificate(sockets, certificate);
+var availability = NativeAuthentication.GetStatus(sockets, out var status);
+```
+
+`GnsRuntimeOptions.NativeCertificate` performs the same `SetCertificate` operation during runtime
+initialization, before `InitAuthentication` and before creating listen/connect sockets. The blob
+must come from a secret store or coordinator response; no certificate material belongs in source,
+CI variables committed to the repository, or client logs. Native certificate validation establishes
+the authenticated/encrypted GNS transport identity. It does not replace the application-level GS
+join claim: the GS control plane still issues a short-lived signed claim containing the match,
+allocation, player, build, and expiry, and `ConnectionAdmission` validates that claim after the
+transport connection is established.
+
+This repository's selected open-source backend does not expose Steamworks `BeginAuthSession` or
+Steam ticket callbacks. `NativeAuthentication.Capabilities.SteamAuthTickets` therefore remains
+`false`; enabling that flow requires the Steamworks GnsSharp backend and Steamworks runtime, which
+are not part of this build.
 
 For a reproducible external native runtime, use the checked-in Docker harness described in
 [`docs/native-runtime-container.md`](docs/native-runtime-container.md). It builds GNS and runs the

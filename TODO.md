@@ -11,7 +11,8 @@ present but an external/backend limitation remains and is documented.
    reject invalid or expired credentials, and add backend-specific tests or an explicit unsupported
    backend result.
 
-   Certificate/authenticated transport enforcement and `InitAuthentication` are integrated. Steam
+   Certificate request/set/status operations and runtime certificate provisioning are integrated;
+   certificate/authenticated transport enforcement and `InitAuthentication` are integrated. Steam
    `BeginAuthSession` ticket callbacks are not exposed by the selected open-source GnsSharp backend;
    native Steamworks ticket validation requires the Steamworks backend and a platform Steam identity.
    The framework rejects connections lacking native authentication instead of treating application

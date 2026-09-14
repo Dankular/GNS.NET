@@ -43,8 +43,23 @@ public sealed class ConnectionPolicyTests
     public void NativeAuthentication_ReportsBackendTicketCapability()
     {
         Assert.True(NativeAuthentication.Capabilities.CertificateTransportValidation);
+        Assert.True(NativeAuthentication.Capabilities.CertificateProvisioning);
         Assert.False(NativeAuthentication.Capabilities.SteamAuthTickets);
-        Assert.Contains("Steam", NativeAuthentication.Capabilities.Limitation);
+        Assert.Contains("Steam BeginAuthSession", NativeAuthentication.Capabilities.Limitation);
+    }
+
+    [Fact]
+    public void NativeAuthentication_RejectsEmptyCertificateWithoutCallingNativeApi()
+    {
+        Assert.Throws<ArgumentException>(() => NativeAuthentication.SetCertificate(null!, []));
+    }
+
+    [Fact]
+    public void NativeAuthenticationBinding_ExposesCertificateAndStatusOperations()
+    {
+        Assert.NotNull(typeof(ISteamNetworkingSockets).GetMethod(nameof(ISteamNetworkingSockets.SetCertificate)));
+        Assert.NotNull(typeof(ISteamNetworkingSockets).GetMethod(nameof(ISteamNetworkingSockets.GetCertificateRequest)));
+        Assert.NotNull(typeof(ISteamNetworkingSockets).GetMethod(nameof(ISteamNetworkingSockets.GetAuthenticationStatus), new[] { typeof(SteamNetAuthenticationStatus_t).MakeByRefType() }));
     }
 
     [Fact]

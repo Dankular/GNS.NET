@@ -94,11 +94,13 @@ jobs:
         mkdir -p artifacts
         cat > artifacts/native-auth-capability.json <<'JSON'
         {
-          "nativeTransportAuthentication": "not-configured",
+          "nativeTransportAuthentication": "certificate-api-wired-but-credential-not-provisioned",
+          "certificateProvisioningApi": "compiled-and-capability-tested",
           "loopbackMode": "explicit-insecure-only",
           "managedAdmissionAndExternalAuthenticationTests": "passed",
           "embeddedSecrets": false,
-          "realSteamworksOrGNSCertificateValidation": "not-verified",
+          "realSteamworksCertificateTicketValidation": "unsupported-by-open-source-backend",
+          "realGnsCertificateValidation": "requires-coordinator-issued-certificate",
           "realNatTurnTraversal": "not-verified"
         }
         JSON
