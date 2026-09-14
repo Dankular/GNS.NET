@@ -38,6 +38,17 @@ public sealed partial class ReplicationRuntimeTests
     }
 
     [Fact]
+    public void RoomLifecycle_EmitsDeterministicSceneTransitions()
+    {
+        var room = new RoomLifecycle<string>(); var transitions = new List<RoomSceneTransition>(); room.SceneChanged += transitions.Add;
+        Assert.False(room.TransitionScene("default", 1));
+        Assert.True(room.TransitionScene("arena", 42));
+        Assert.Equal("arena", room.CurrentScene);
+        Assert.Equal(new[] { new RoomSceneTransition("default", "arena", 42) }, transitions);
+        room.Ended(); Assert.False(room.TransitionScene("results", 43));
+    }
+
+    [Fact]
     public void RpcRouter_EnforcesAuthorityAndCorrelatesResponse()
     {
         var router = new RpcRouter(); router.SetOwner(4, "alice");

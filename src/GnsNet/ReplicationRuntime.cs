@@ -59,6 +59,7 @@ public sealed class NetworkObjectRegistry<TClientId> where TClientId : notnull
 
 public enum RoomPhase { Lobby, Ready, Starting, InGame, Draining, Ended }
 public readonly record struct RoomMember<TClientId>(TClientId Client, bool Ready) where TClientId : notnull;
+public readonly record struct RoomSceneTransition(string From, string To, uint Tick);
 
 /// <summary>Deterministic room lifecycle with ready/start locking and late-join policy.</summary>
 public sealed class RoomLifecycle<TClientId> where TClientId : notnull
@@ -67,6 +68,8 @@ public sealed class RoomLifecycle<TClientId> where TClientId : notnull
     public RoomPhase Phase { get; private set; } = RoomPhase.Lobby;
     public int MaxPlayers { get; }
     public bool AllowLateJoin { get; init; }
+    public string CurrentScene { get; private set; } = "default";
+    public event Action<RoomSceneTransition>? SceneChanged;
     public IReadOnlyCollection<RoomMember<TClientId>> Members => this.members.Select(x => new RoomMember<TClientId>(x.Key, x.Value)).ToArray();
     public RoomLifecycle(int maxPlayers = 16) { if (maxPlayers < 2) throw new ArgumentOutOfRangeException(nameof(maxPlayers)); this.MaxPlayers = maxPlayers; }
     public bool Join(TClientId client)
@@ -87,6 +90,11 @@ public sealed class RoomLifecycle<TClientId> where TClientId : notnull
         this.Phase = RoomPhase.Starting; return true;
     }
     public void BeginGame() { if (this.Phase != RoomPhase.Starting) throw new InvalidOperationException("Room must be starting."); this.Phase = RoomPhase.InGame; }
+    public bool TransitionScene(string scene, uint tick)
+    {
+        if (string.IsNullOrWhiteSpace(scene) || this.Phase is RoomPhase.Ended or RoomPhase.Draining || string.Equals(scene, this.CurrentScene, StringComparison.Ordinal)) return false;
+        string previous = this.CurrentScene; this.CurrentScene = scene; this.SceneChanged?.Invoke(new(previous, scene, tick)); return true;
+    }
     public void Drain() { if (this.Phase is RoomPhase.Ended or RoomPhase.Draining) return; this.Phase = RoomPhase.Draining; }
     public void Ended() => this.Phase = RoomPhase.Ended;
 }

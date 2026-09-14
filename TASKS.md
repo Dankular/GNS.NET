@@ -18,7 +18,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Add request timeout and expiry handling.
   - [x] Add endpoint capability discovery.
 - [ ] M1.3 Room/scene lifecycle integration
-  - [ ] Add scene transition records.
+  - [x] Add scene transition records.
   - [ ] Add late-join state transfer integration.
   - [ ] Add full reconnect-during-spawn integration coverage.
 
