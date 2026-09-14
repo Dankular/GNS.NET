@@ -154,6 +154,15 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void AutomaticSnapshotScheduler_BatchesLifecycleRecordsOnReliableChannel()
+    {
+        var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(new InterestManager<string, TestEntity>(), new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));
+        var scheduler = new AutomaticSnapshotScheduler<string, TestEntity, TestState>(pipeline); scheduler.AddClient("a");
+        scheduler.PublishLifecycle(new[] { new NetworkObjectChange(NetworkObjectChangeKind.Spawned, new NetworkObjectDescriptor(1, 2, "a", 4)) }, 9, 4, change => [1, (byte)change.Object.ObjectId]);
+        var item = Assert.Single(scheduler.Drain("a", 4)); Assert.Equal(NetChannel.Event, item.Channel); Assert.Equal(9, item.Frame.Opcode);
+    }
+
+    [Fact]
     public void PrioritySendQueue_ShedsFramesAtConfiguredBudgetAndAccountsBytes()
     {
         var queue = new PrioritySendQueue(maxFrames: 1, maxBytes: 64); var first = new NetFrame(1, 1, new byte[8]); var second = new NetFrame(2, 1, new byte[8]);

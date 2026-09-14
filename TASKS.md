@@ -29,7 +29,7 @@ means a supported partial implementation or an external validation dependency; `
   - [~] Generate encode/decode methods using dirty masks (generated contract delegates field payload encoding to the registered codec; type-specific field payload generation remains open).
   - [x] Generate schema compatibility metadata.
 - [ ] M2.2 Caller-free automatic replication tick
-  - [ ] Integrate lifecycle records with AOI/delta/batching.
+  - [x] Integrate lifecycle records with AOI/delta/batching.
   - [~] Automatically schedule dirty components (automatic world/snapshot tick scheduling is integrated; component-level dirty tracking remains open).
   - [ ] Select channel and priority without per-message caller plumbing.
 - [ ] M2.3 Automatic budgets and shed accounting

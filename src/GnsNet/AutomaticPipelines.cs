@@ -26,6 +26,12 @@ public sealed class SnapshotPipeline<TClientId, TEntity, TSnapshot> where TClien
         queue.Enqueue(new NetFrame(snapshotOpcode, tick, NetSerializer.Serialize(this.delta.Create(client!, snapshot))), NetChannel.State, relevance);
     }
     public IReadOnlyList<(NetFrame Frame, NetChannel Channel)> Drain(TClientId client, int maxFrames) => this.queues.TryGetValue(client, out PrioritySendQueue? queue) ? queue.Drain(maxFrames) : [];
+    public void QueueLifecycle(TClientId client, IEnumerable<NetworkObjectChange> changes, byte opcode, uint tick, Func<NetworkObjectChange, byte[]> encoder, float relevance = 1f)
+    {
+        ArgumentNullException.ThrowIfNull(changes); ArgumentNullException.ThrowIfNull(encoder);
+        if (!this.queues.TryGetValue(client, out PrioritySendQueue? queue)) this.queues[client] = queue = new();
+        foreach (NetworkObjectChange change in changes) queue.Enqueue(new NetFrame(opcode, tick, encoder(change)), NetChannel.Event, relevance);
+    }
     public void Acknowledge(TClientId client, TSnapshot authoritativeSnapshot) => this.delta.Acknowledge(client!, authoritativeSnapshot);
     public void Remove(TClientId client) { this.queues.Remove(client); this.lastSnapshotTicks.Remove(client); this.delta.Remove(client!); this.interest.Remove(client); }
 }
@@ -58,6 +64,11 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
     {
         if (this.worldProvider is null || this.snapshotProvider is null || this.relevanceProvider is null) throw new InvalidOperationException("Automatic tick is not configured.");
         this.Publish(this.worldProvider(), this.snapshotProvider, this.relevanceProvider, this.entityOpcode, this.snapshotOpcode, tick);
+    }
+    public void PublishLifecycle(IEnumerable<NetworkObjectChange> changes, byte opcode, uint tick, Func<NetworkObjectChange, byte[]> encoder, float relevance = 1f)
+    {
+        NetworkObjectChange[] records = changes?.ToArray() ?? throw new ArgumentNullException(nameof(changes));
+        foreach (TClientId client in this.clients) this.pipeline.QueueLifecycle(client, records, opcode, tick, encoder, relevance);
     }
     public void RemoveClient(TClientId client) { this.clients.Remove(client); this.pipeline.Remove(client); }
     public void Publish(IEnumerable<TEntity> entities, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode, uint tick)
