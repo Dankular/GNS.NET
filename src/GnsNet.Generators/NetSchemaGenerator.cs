@@ -49,6 +49,9 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
                 members.AppendLine($"    public const int GeneratedNetworkFieldCount = {fields.Length};");
                 members.AppendLine($"    public static readonly string[] GeneratedNetworkFieldNames = new string[] {{ {string.Join(", ", fields.Select(x => "\"" + x.Identifier.Text + "\""))} }};");
                 members.AppendLine($"    public static readonly uint[] GeneratedNetworkFieldIds = new uint[] {{ {string.Join(", ", fields.Select(x => Hash(x.Identifier.Text).ToString() + "u"))} }};");
+                string schemaVersion = schema ? "GeneratedNetworkSchemaVersion" : "1";
+                members.AppendLine($"    public byte[] EncodeGeneratedFields(global::GnsNet.DirtyFieldMask mask, global::System.Func<int, byte[]> fieldEncoder) => global::GnsNet.DirtyFieldMaskCodec.Encode({schemaVersion}, mask, fieldEncoder);");
+                members.AppendLine($"    public static (int SchemaVersion, global::GnsNet.DirtyFieldMask Mask, global::System.Collections.Generic.IReadOnlyDictionary<int, byte[]> Fields) DecodeGeneratedFields(global::System.ReadOnlySpan<byte> data, int maximumFieldBytes = 1048576) => global::GnsNet.DirtyFieldMaskCodec.Decode(data, {schemaVersion}, GeneratedNetworkFieldCount, maximumFieldBytes);");
             }
             if (rpc)
             {
