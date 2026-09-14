@@ -116,6 +116,15 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void LifecycleScheduler_EmitsSpawnWhenExistingObjectEntersAoi()
+    {
+        var registry = new NetworkObjectRegistry<string>(); var scheduler = new LifecycleReplicationScheduler<string>(registry, 90, change => [(byte)change.Kind]); scheduler.AddClient("a");
+        NetworkObjectDescriptor entity = registry.Spawn(2, "a", 1); Assert.Empty(scheduler.Drain("a", 10));
+        scheduler.UpdateVisibility("a", [entity.ObjectId], 2); var frame = Assert.Single(scheduler.Drain("a", 10)); Assert.Equal((byte)NetworkObjectChangeKind.Spawned, frame.Frame.Payload[0]);
+        scheduler.UpdateVisibility("a", [], 3); var despawn = Assert.Single(scheduler.Drain("a", 10)); Assert.Equal((byte)NetworkObjectChangeKind.Despawned, despawn.Frame.Payload[0]);
+    }
+
+    [Fact]
     public void RewindAuthorization_ClampsOnlyWithinServerWindowAndRejectsFuture()
     {
         var auth = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UtcNow;

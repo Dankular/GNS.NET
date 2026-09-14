@@ -57,7 +57,7 @@ means a supported partial implementation or an external validation dependency; `
 ## M4 — AOI and lag compensation
 
 - [ ] M4.1 Visibility-safe replication integration
-  - [ ] Enforce scene/team/owner/occlusion lifecycle ordering.
+  - [x] Enforce scene/team/owner/occlusion lifecycle ordering.
   - [x] Prevent hidden entities from entering serialized batches.
 - [ ] M4.2 Bounded hitbox budgets
   - [x] Add memory/retention budgets and rejection metrics.
