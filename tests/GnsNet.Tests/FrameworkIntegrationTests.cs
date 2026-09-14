@@ -97,6 +97,23 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void SnapshotPipeline_DoesNotSerializeEntitiesOutsideClientInterest()
+    {
+        var interest = new InterestManager<string, TestEntity>();
+        interest.SetView("p", new InterestPoint(0, 0, 5));
+        var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(
+            interest,
+            new DeltaCompressor<TestState>((_, current) => current, (_, change) => change),
+            entity => (entity.X, entity.Y));
+
+        pipeline.Queue("p", [new TestEntity { X = 1 }, new TestEntity { X = 100 }], new TestState { Value = 1 }, 2, 3, 1, 1);
+        var frame = Assert.Single(pipeline.Drain("p", 10), item => item.Frame.Opcode == 2);
+        TestEntity visible = NetSerializer.Deserialize<TestEntity>(frame.Frame.Payload)!;
+
+        Assert.Equal(1, visible.X);
+    }
+
+    [Fact]
     public void SnapshotPipeline_AcknowledgementAdvancesPerClientBaseline()
     {
         var interest = new InterestManager<string, TestEntity>(); interest.SetView("p", new InterestPoint(0, 0, 5));
