@@ -30,7 +30,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Generate schema compatibility metadata.
 - [ ] M2.2 Caller-free automatic replication tick
   - [ ] Integrate lifecycle records with AOI/delta/batching.
-  - [ ] Automatically schedule dirty components.
+  - [~] Automatically schedule dirty components (automatic world/snapshot tick scheduling is integrated; component-level dirty tracking remains open).
   - [ ] Select channel and priority without per-message caller plumbing.
 - [ ] M2.3 Automatic budgets and shed accounting
   - [ ] Integrate byte/message budgets into scheduler.

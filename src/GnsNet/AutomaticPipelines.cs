@@ -35,6 +35,11 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
 {
     private readonly SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline;
     private readonly HashSet<TClientId> clients = new();
+    private Func<IEnumerable<TEntity>>? worldProvider;
+    private Func<TClientId, TSnapshot>? snapshotProvider;
+    private Func<TClientId, float>? relevanceProvider;
+    private byte entityOpcode;
+    private byte snapshotOpcode;
     public AutomaticSnapshotScheduler(SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline) => this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
     public void AddClient(TClientId client) => this.clients.Add(client);
     /// <summary>Registers a late joiner and queues its immediate authoritative world transfer.</summary>
@@ -42,6 +47,17 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
     {
         this.AddClient(client);
         this.pipeline.Queue(client, entities, snapshot, entityOpcode, snapshotOpcode, tick, relevance);
+    }
+    /// <summary>Configures the world and transport policy once for caller-free per-tick publication.</summary>
+    public void ConfigureAutoTick(Func<IEnumerable<TEntity>> world, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode)
+    {
+        this.worldProvider = world ?? throw new ArgumentNullException(nameof(world)); this.snapshotProvider = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+        this.relevanceProvider = relevance ?? throw new ArgumentNullException(nameof(relevance)); this.entityOpcode = entityOpcode; this.snapshotOpcode = snapshotOpcode;
+    }
+    public void Tick(uint tick)
+    {
+        if (this.worldProvider is null || this.snapshotProvider is null || this.relevanceProvider is null) throw new InvalidOperationException("Automatic tick is not configured.");
+        this.Publish(this.worldProvider(), this.snapshotProvider, this.relevanceProvider, this.entityOpcode, this.snapshotOpcode, tick);
     }
     public void RemoveClient(TClientId client) { this.clients.Remove(client); this.pipeline.Remove(client); }
     public void Publish(IEnumerable<TEntity> entities, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode, uint tick)
