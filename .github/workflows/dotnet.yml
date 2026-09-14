@@ -313,6 +313,7 @@ jobs:
         New-Item -ItemType Directory -Force artifacts | Out-Null
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/windows-transport-ipv4.json
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --address "[::1]:27991" --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/windows-transport-ipv6.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -p:GnsNetBackend=Win64 --no-build -- --scenario transport --insecure --native-path $artifact.FullName --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --native-loss-percent 10 --deterministic --json artifacts/windows-transport-loss.json
     - name: Upload Windows runtime smoke result
       uses: actions/upload-artifact@v4
       with:
@@ -346,6 +347,7 @@ jobs:
         mkdir -p artifacts
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv4.json
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address '[::1]:27991' --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv6.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --native-loss-percent 10 --deterministic --json artifacts/linux-transport-loss.json
     - name: Upload Linux runtime smoke result
       uses: actions/upload-artifact@v4
       with:
