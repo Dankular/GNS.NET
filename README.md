@@ -197,6 +197,8 @@ never be enabled on an internet-facing server.
 Applications can use `GnsAuthoritativeServer<TSessionId, TState, TInput>` and
 `GnsPredictedClient<TInput, TState>` when they want the framework to compose the common systems:
 
+Copyable server/client/contract/auth starting points are in [`templates/`](templates/README.md).
+
 ```csharp
 var server = new GnsAuthoritativeServer<string, WorldState, PlayerInput>(
     gnsServer, initialWorld,

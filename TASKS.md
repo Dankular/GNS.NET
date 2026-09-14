@@ -82,7 +82,7 @@ means a supported partial implementation or an external validation dependency; `
 
 - [ ] M6.1 Generated docs/templates
   - [ ] Generate API/reference documentation.
-  - [ ] Add server, client, room, entity, and auth-adapter templates.
+  - [x] Add server, client, room, entity, and auth-adapter templates.
 - [ ] M6.2 Observability
   - [ ] Add OpenTelemetry dashboards.
   - [ ] Add player-facing overlay integration.
