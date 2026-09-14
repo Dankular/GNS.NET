@@ -111,3 +111,20 @@ public sealed class RpcRouter
         return allowed ? endpoint.Handler(request) : new(request.RequestId, false, null, "Authority denied.");
     }
 }
+
+/// <summary>Client-side request correlation with bounded pending requests and timeouts.</summary>
+public sealed class RpcRequestTracker
+{
+    private readonly Dictionary<Guid, TaskCompletionSource<RpcResponse>> pending = new();
+    private readonly object sync = new();
+    public int PendingCount { get { lock (this.sync) return this.pending.Count; } }
+    public (Guid RequestId, Task<RpcResponse> Completion) Create(CancellationToken cancellationToken = default)
+    {
+        Guid id = Guid.NewGuid(); var completion = new TaskCompletionSource<RpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (this.sync) this.pending.Add(id, completion);
+        if (cancellationToken.CanBeCanceled) cancellationToken.Register(() => Cancel(id));
+        return (id, completion.Task);
+    }
+    public bool Complete(RpcResponse response) { lock (this.sync) if (!this.pending.Remove(response.RequestId, out var completion)) return false; else return completion.TrySetResult(response); }
+    public bool Cancel(Guid id) { lock (this.sync) if (!this.pending.Remove(id, out var completion)) return false; else return completion.TrySetCanceled(); }
+}

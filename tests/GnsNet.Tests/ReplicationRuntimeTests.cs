@@ -42,4 +42,14 @@ public sealed class ReplicationRuntimeTests
         Assert.True(room.SetReady("a", true)); Assert.Equal(RoomPhase.Lobby, room.Phase); Assert.True(room.SetReady("b", true));
         Assert.Equal(RoomPhase.Ready, room.Phase); Assert.True(room.Start()); room.BeginGame(); Assert.False(room.Join("c"));
     }
+
+    [Fact]
+    public async Task RpcRequestTracker_CompletesAndCancelsCorrelatedRequests()
+    {
+        var tracker = new RpcRequestTracker(); var request = tracker.Create();
+        Assert.True(tracker.Complete(new RpcResponse(request.RequestId, true, [9])));
+        Assert.True((await request.Completion).Accepted); Assert.Equal(0, tracker.PendingCount);
+        using var cts = new CancellationTokenSource(); var cancelled = tracker.Create(cts.Token); cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.Completion); Assert.Equal(0, tracker.PendingCount);
+    }
 }

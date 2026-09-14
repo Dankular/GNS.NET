@@ -411,6 +411,30 @@ connections and `SpatialHashInterestManager` supports distance plus scene/team/v
 `HitboxRewindHistory` provides bounded authoritative 2D rewind queries. `GnsTelemetry` emits
 OpenTelemetry-compatible activities and meters for bytes, drops, RTT, and pending reliable data.
 
+Before accepting gameplay messages, negotiate the wire contract and keep RPC replies correlated:
+
+```csharp
+var protocol = new ProtocolCompatibility(new ProtocolVersion(1, 3, 4));
+ProtocolNegotiationResult negotiated = protocol.Negotiate(remoteVersion);
+if (!negotiated.Accepted) return; // close before dispatching gameplay frames
+
+var requests = new RpcRequestTracker();
+var pending = requests.Create(cancellationToken);
+Send(new RpcRequest(pending.RequestId, "inventory.use", null, playerId, payload, tick));
+// On the response path: requests.Complete(response). Unknown/duplicate IDs are ignored.
+RpcResponse response = await pending.Completion;
+```
+
+The scheduler owns the per-client AOI/delta/priority pass and can publish one authoritative
+world for every registered client:
+
+```csharp
+var scheduler = new AutomaticSnapshotScheduler<string, Entity, WorldSnapshot>(pipeline);
+scheduler.AddClient(playerId);
+scheduler.Publish(world, id => BuildSnapshot(id), id => 1f, entityOpcode: 10,
+    snapshotOpcode: 11, tick: serverTick);
+```
+
 P2P deployments can use `HttpP2PSignalingClient` with a backend-issued bearer token to exchange
 short-lived signals and TURN credentials, then use `P2PTraversalTester` in CI to verify direct and
 relay fallback paths. The signaling service must never expose long-lived TURN secrets to clients.

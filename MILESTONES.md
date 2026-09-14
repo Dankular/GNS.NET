@@ -55,7 +55,7 @@ and the end-to-end test that allocates a dedicated server before the gameplay cl
 
 - [x] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
 - [~] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; automatic transport rehydration remains.
-- [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; generated registration and correlation exist, but command classes, timeout, and client-target routing remain.
+- [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; authority, generated registration, correlation, and cancellation exist, but command classes and client-target routing remain.
 - [~] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons. Scene transition messages remain.
 - [~] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join; current tests cover core idempotency/authority/late join, not the full reconnect integration.
 
@@ -63,7 +63,7 @@ Exit criteria: a sample game can create entities, transfer ownership, call an au
 
 ### M2 — Production replication protocol
 
-- [~] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; generated field metadata now exists, but generated field encoders and compatibility negotiation remain.
+- [~] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation; generated field metadata and compatibility negotiation exist, but generated field encoders remain.
 - [~] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection; automatic world publication now exists, but lifecycle records and caller-free tick integration remain.
 - [~] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters; queue/load controls exist but are not fully integrated into automatic snapshot scheduling.
 - [x] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.

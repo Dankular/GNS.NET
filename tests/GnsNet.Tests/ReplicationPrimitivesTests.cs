@@ -76,6 +76,20 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void LifecycleScheduler_QueuesOnlyVisibleAuthoritativeChanges()
+    {
+        var registry = new NetworkObjectRegistry<string>();
+        var scheduler = new LifecycleReplicationScheduler<string>(registry, 90, change => [(byte)change.Kind]);
+        scheduler.AddClient("a"); scheduler.UpdateVisibility("a", [1], 4);
+        NetworkObjectDescriptor entity = registry.Spawn(2, "a", 4);
+        scheduler.UpdateVisibility("a", [entity.ObjectId], 5);
+        var frames = scheduler.Drain("a", 10);
+        Assert.Single(frames); Assert.Equal((byte)NetworkObjectChangeKind.Spawned, frames[0].Frame.Payload[0]);
+        Assert.True(registry.Despawn(entity.ObjectId, "gone"));
+        Assert.Single(scheduler.Drain("a", 10));
+    }
+
+    [Fact]
     public void RewindAuthorization_ClampsOnlyWithinServerWindowAndRejectsFuture()
     {
         var auth = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UtcNow;
