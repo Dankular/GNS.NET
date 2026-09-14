@@ -198,6 +198,7 @@ Applications can use `GnsAuthoritativeServer<TSessionId, TState, TInput>` and
 `GnsPredictedClient<TInput, TState>` when they want the framework to compose the common systems:
 
 Copyable server/client/contract/auth starting points are in [`templates/`](templates/README.md).
+An importable Grafana dashboard for the built-in OpenTelemetry meters is in [`docs/observability/gnsnet-grafana-dashboard.json`](docs/observability/gnsnet-grafana-dashboard.json).
 
 ```csharp
 var server = new GnsAuthoritativeServer<string, WorldState, PlayerInput>(

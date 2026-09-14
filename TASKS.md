@@ -84,8 +84,8 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Generate API/reference documentation.
   - [x] Add server, client, room, entity, and auth-adapter templates.
 - [ ] M6.2 Observability
-  - [ ] Add OpenTelemetry dashboards.
-  - [ ] Add player-facing overlay integration.
+  - [x] Add OpenTelemetry dashboards.
+  - [x] Add player-facing overlay integration.
 - [ ] M6.3 Replay and load testing
   - [x] Add persistent replay index and metadata.
   - [~] Add redaction and deterministic playback environments (redaction and deterministic playback are integrated; isolated environment orchestration remains open).

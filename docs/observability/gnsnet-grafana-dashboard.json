@@ -1,0 +1,10 @@
+{
+  "title": "GNS.NET transport",
+  "schemaVersion": 39,
+  "panels": [
+    { "type": "timeseries", "title": "RTT (ms)", "targets": [{ "expr": "gnsnet_rtt" }] },
+    { "type": "timeseries", "title": "Packet loss", "targets": [{ "expr": "gnsnet_packets_dropped" }] },
+    { "type": "timeseries", "title": "Bytes in/out", "targets": [{ "expr": "gnsnet_bytes_in" }, { "expr": "gnsnet_bytes_out" }] },
+    { "type": "timeseries", "title": "Pending reliable bytes", "targets": [{ "expr": "gnsnet_pending_reliable" }] }
+  ]
+}
