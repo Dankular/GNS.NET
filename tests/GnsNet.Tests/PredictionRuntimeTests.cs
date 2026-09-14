@@ -57,6 +57,22 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void SnapshotInterpolator_IgnoresDuplicateAndOldSnapshots()
+    {
+        var interpolator = new SnapshotInterpolator<int>(); interpolator.Add(1, 10); interpolator.Add(2, 20); interpolator.Add(2, 99); interpolator.Add(1, 1);
+        Assert.True(interpolator.TrySample(2, (a, b, amount) => (int)(a + (b - a) * amount), out int value)); Assert.Equal(20, value);
+    }
+
+    [Fact]
+    public void RollbackBuffer_ReconcilesLongWindowWithinConfiguredBudget()
+    {
+        var rollback = new RollbackBuffer<int, int>(capacity: 32, maxResimulationTicks: 32);
+        for (uint tick = 1; tick <= 20; tick++) rollback.Record(tick, 1, (int)tick);
+        RollbackResult<int> result = rollback.ReconcileDetailed(1, 0, (state, input) => state + input);
+        Assert.True(result.Corrected); Assert.Equal(19, result.ResimulatedTicks); Assert.Equal(19, rollback.ResimulatedTickCount);
+    }
+
+    [Fact]
     public void DirtyMaskQuantizationAndExtrapolationAreDeterministic()
     {
         var mask = new DirtyFieldMask(65); mask.Set(64); Assert.True(mask.IsSet(64)); mask.Clear(); Assert.False(mask.IsSet(64));

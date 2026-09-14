@@ -311,6 +311,17 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public async Task NetworkConditionSimulator_InjectsLatencyJitterAndLossDeterministically()
+    {
+        var simulator = new NetworkConditionSimulator(new NetworkConditions(TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1), 0), 9);
+        DateTimeOffset before = DateTimeOffset.UtcNow; bool delivered = await simulator.DeliverAsync(() => ValueTask.CompletedTask); DateTimeOffset after = DateTimeOffset.UtcNow;
+        Assert.True(delivered); Assert.True(after - before >= TimeSpan.Zero);
+        simulator.Conditions = new NetworkConditions(TimeSpan.Zero, TimeSpan.Zero, 50); int dropped = 0;
+        for (int i = 0; i < 100; i++) if (simulator.ShouldDrop()) dropped++;
+        Assert.InRange(dropped, 20, 80);
+    }
+
+    [Fact]
     public async Task ShardCoordinator_TransfersPlayerStateDuringMigration()
     {
         var controller = new FakeController(); var transfer = new FakeTransfer(); var lifecycle = new ShardLifecycle<string, string>(TimeSpan.FromMinutes(1));

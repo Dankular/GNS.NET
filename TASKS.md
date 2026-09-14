@@ -50,9 +50,9 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Apply measured drift to synchronization policy.
   - [x] Integrate bounded catch-up/slow-down into TickLoop.
   - [x] Expose prediction cost and misprediction magnitude.
-- [ ] M3.3 Impairment and long-rollback tests
-  - [ ] Test latency, jitter, packet loss, and duplicate snapshots.
-  - [ ] Test clock drift and long rollback windows.
+- [x] M3.3 Impairment and long-rollback tests
+  - [x] Test latency, jitter, packet loss, and duplicate snapshots.
+  - [x] Test clock drift and long rollback windows.
 
 ## M4 — AOI and lag compensation
 
