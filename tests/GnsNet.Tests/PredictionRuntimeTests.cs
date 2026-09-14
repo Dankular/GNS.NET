@@ -32,6 +32,25 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public async Task PredictedClient_ReconcilesInputsAcrossTickWraparound()
+    {
+        var transport = new ReconnectableClient(() => throw new InvalidOperationException());
+        var host = new GnsClientHost(transport);
+        var client = new GnsPredictedClient<TestState, TestState>(host, new TestState { Value = 0 },
+            (state, input) => new TestState { Value = state.Value + input.Value },
+            (from, to, amount) => new TestState { Value = amount < 1f ? from.Value : to.Value });
+
+        client.SubmitInput(uint.MaxValue, new TestState { Value = 1 });
+        client.SubmitInput(0, new TestState { Value = 1 });
+        host.Router.Dispatch(new NetFrame(2, uint.MaxValue - 1, NetSerializer.Serialize(new TestState { Value = 0 })));
+
+        Assert.Equal(2, client.PredictedState.Value);
+        Assert.Equal(2, client.LastResimulatedTicks);
+        Assert.True(client.LastCorrected);
+        await host.DisposeAsync();
+    }
+
+    [Fact]
     public void ClockSynchronizer_ComputesOffsetAndJitter()
     {
         var clock = new NetworkClockSynchronizer(); var origin = DateTimeOffset.UnixEpoch;
