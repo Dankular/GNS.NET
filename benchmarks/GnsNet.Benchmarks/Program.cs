@@ -94,9 +94,9 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options)
         {
             long sentAt = Stopwatch.GetTimestamp();
             foreach (GnsClient client in clients) { client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay); sent++; }
-            Thread.Sleep(1);
+            Thread.Yield();
             foreach (ReceivedMessage message in server.Poll()) server.Send(message.Connection, message.Data, ESteamNetworkingSendType.UnreliableNoDelay);
-            Thread.Sleep(1);
+            Thread.Yield();
             foreach (GnsClient client in clients) received += client.Poll().Count;
             if (received > 0) rtts.Add((Stopwatch.GetTimestamp() - sentAt) * 1000d / Stopwatch.Frequency);
         }
