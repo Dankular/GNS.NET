@@ -172,6 +172,13 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void InterestManager_EnforcesRegisteredVisibilityBeforeCulling()
+    {
+        var interest = new InterestManager<string, TestEntity>(); interest.SetView("a", new InterestPoint(0, 0, 100)); interest.SetVisibility("a", entity => entity.X >= 0);
+        Assert.Single(interest.Cull("a", new[] { new TestEntity { X = 1 }, new TestEntity { X = -1 } }, entity => (entity.X, entity.Y)));
+    }
+
+    [Fact]
     public void PrioritySendQueue_ShedsFramesAtConfiguredBudgetAndAccountsBytes()
     {
         var queue = new PrioritySendQueue(maxFrames: 1, maxBytes: 64); var first = new NetFrame(1, 1, new byte[8]); var second = new NetFrame(2, 1, new byte[8]);

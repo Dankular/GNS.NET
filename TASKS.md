@@ -58,7 +58,7 @@ means a supported partial implementation or an external validation dependency; `
 
 - [ ] M4.1 Visibility-safe replication integration
   - [ ] Enforce scene/team/owner/occlusion lifecycle ordering.
-  - [ ] Prevent hidden entities from entering serialized batches.
+  - [x] Prevent hidden entities from entering serialized batches.
 - [ ] M4.2 Bounded hitbox budgets
   - [ ] Add memory/retention budgets and rejection metrics.
 - [ ] M4.3 Authoritative shooter rewind integration

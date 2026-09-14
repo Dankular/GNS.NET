@@ -6,14 +6,22 @@ public readonly record struct InterestPoint(float X, float Y, float Radius);
 public sealed class InterestManager<TClientId, TEntity> where TClientId : notnull
 {
     private readonly Dictionary<TClientId, InterestPoint> views = new();
+    private readonly Dictionary<TClientId, Func<TEntity, bool>> visibility = new();
     public void SetView(TClientId client, InterestPoint view) => this.views[client] = view;
+    public void SetVisibility(TClientId client, Func<TEntity, bool> predicate) => this.visibility[client] = predicate ?? throw new ArgumentNullException(nameof(predicate));
     public IEnumerable<TEntity> Cull(TClientId client, IEnumerable<TEntity> entities, Func<TEntity, (float X, float Y)> position)
     {
         if (!this.views.TryGetValue(client, out InterestPoint view)) return [];
         float radiusSquared = view.Radius * view.Radius;
-        return entities.Where(entity => { var p = position(entity); float dx = p.X - view.X, dy = p.Y - view.Y; return dx * dx + dy * dy <= radiusSquared; });
+        Func<TEntity, bool>? visible = this.visibility.TryGetValue(client, out Func<TEntity, bool>? predicate) ? predicate : null;
+        return entities.Where(entity =>
+        {
+            if (visible is not null && !visible(entity)) return false;
+            var p = position(entity); float dx = p.X - view.X, dy = p.Y - view.Y;
+            return dx * dx + dy * dy <= radiusSquared;
+        });
     }
-    public void Remove(TClientId client) => this.views.Remove(client);
+    public void Remove(TClientId client) { this.views.Remove(client); this.visibility.Remove(client); }
 }
 
 /// <summary>Stores recent authoritative states for server-side lag-compensated queries.</summary>
