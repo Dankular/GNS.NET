@@ -22,6 +22,17 @@ docker compose -f docker/docker-compose.native.yml build
 and checks out the requested ref explicitly, so VPS runs can use the same reviewed commit as hosted
 CI instead of silently building the default branch.
 
+The build VPS uses the same compose file and reviewed default. To run the harness there through the
+existing VPS helper, refresh `/opt/gnsnet-native-cfa96ce` to the target branch and run:
+
+```powershell
+cmd.exe /c vps.cmd exec "docker compose -f /opt/gnsnet-native-cfa96ce/docker/docker-compose.native.yml build --pull"
+cmd.exe /c vps.cmd exec "docker compose -f /opt/gnsnet-native-cfa96ce/docker/docker-compose.native.yml run --rm gnsnet-native-ci"
+```
+
+The VPS validation is useful for native Linux loading and controlled impairment, but it is still a
+single-host loopback test. It does not substitute for two external peers behind independent NATs.
+
 The container is intentionally a verification harness, not a production game-server image. Do not
 put PlayFab, Steamworks, or TURN secrets in the image or compose file. Native traversal still needs
 separate public-network peers and relay credentials; a local container can verify loading, handshake,
