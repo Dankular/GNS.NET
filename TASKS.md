@@ -75,8 +75,8 @@ means a supported partial implementation or an external validation dependency; `
   - [ ] Windows native runtime verification.
   - [ ] Authenticated native CI client/server run.
 - [ ] M5.3 Native CI artifacts
-  - [ ] Cache native dependencies.
-  - [ ] Publish and consume Linux/Windows artifacts in CI.
+  - [x] Cache native dependencies.
+  - [x] Publish and consume Linux/Windows artifacts in CI.
 
 ## M6 — Developer experience and operations
 

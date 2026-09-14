@@ -33,10 +33,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
+    - name: Cache native dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/vcpkg
+          native/GameNetworkingSockets
+        key: gns-native-linux-${{ hashFiles('.github/workflows/dotnet.yml') }}
     - name: Install native build tools
       run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev protobuf-compiler
     - name: Fetch GameNetworkingSockets
-      run: git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets
+      run: if [ ! -d native/GameNetworkingSockets/.git ]; then git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets; fi
     - name: Install native dependencies
       run: vcpkg install --triplet x64-linux
     - name: Configure native transport
@@ -54,11 +61,18 @@ jobs:
     runs-on: windows-2022
     steps:
     - uses: actions/checkout@v4
+    - name: Cache native dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.VCPKG_INSTALLATION_ROOT }}
+          native/GameNetworkingSockets
+        key: gns-native-windows-${{ hashFiles('.github/workflows/dotnet.yml') }}
     - name: Install Ninja
       run: choco install ninja --no-progress -y
     - name: Fetch GameNetworkingSockets
       shell: pwsh
-      run: git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets
+      run: if (-not (Test-Path native/GameNetworkingSockets/.git)) { git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets }
     - name: Install native dependencies
       shell: pwsh
       run: vcpkg install --triplet x64-windows
@@ -74,3 +88,23 @@ jobs:
         name: gamenetworkingsockets-windows-x64
         path: native/build-windows/**/GameNetworkingSockets.dll
         if-no-files-found: error
+
+  native-artifact-consumer:
+    needs: [native-linux, native-windows]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Linux native artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gamenetworkingsockets-linux-x64
+        path: native-artifacts/linux
+    - name: Download Windows native artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gamenetworkingsockets-windows-x64
+        path: native-artifacts/windows
+    - name: Verify native artifact payloads
+      shell: bash
+      run: |
+        test -n "$(find native-artifacts/linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
+        test -n "$(find native-artifacts/windows -type f -name 'GameNetworkingSockets.dll' -print -quit)"
