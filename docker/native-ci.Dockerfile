@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0-noble AS native
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cmake ninja-build git libssl-dev protobuf-compiler pkg-config \
+    && apt-get install -y --no-install-recommends cmake ninja-build git libssl-dev libprotobuf-dev libabsl-dev libcurl4-openssl-dev protobuf-compiler pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 ARG GNS_REF=master
