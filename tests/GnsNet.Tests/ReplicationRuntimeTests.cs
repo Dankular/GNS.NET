@@ -2,9 +2,12 @@ namespace GnsNet.Tests;
 
 using GnsNet;
 using Xunit;
+using MemoryPack;
 
 public sealed class ReplicationRuntimeTests
 {
+    [MemoryPackable] private partial record RenameCommand(string Name);
+    [MemoryPackable] private partial record RenameReply(bool Accepted, string Name);
     [Fact]
     public void Registry_EmitsStableLifecycleAndOwnershipChanges()
     {
@@ -25,6 +28,15 @@ public sealed class ReplicationRuntimeTests
         Assert.False(router.Dispatch(new(id, "object.rename", 4, "bob", [1], 2)).Accepted);
         RpcResponse response = router.Dispatch(new(id, "object.rename", 4, "alice", [2], 3));
         Assert.True(response.Accepted); Assert.Equal(id, response.RequestId); Assert.Equal(new byte[] { 2 }, response.Payload);
+    }
+
+    [Fact]
+    public void RpcRouter_TypedCommandDeserializesAndSerializesResponse()
+    {
+        var router = new RpcRouter(); router.RegisterCommand<RenameCommand, RenameReply>("rename", RpcAuthority.AnyAuthenticated, (_, command) => new(true, command.Name));
+        Guid id = Guid.NewGuid(); RpcResponse response = router.Dispatch(new(id, "rename", null, "client", NetSerializer.Serialize(new RenameCommand("new-name")), 1));
+        Assert.True(response.Accepted); Assert.Equal(new RenameReply(true, "new-name"), NetSerializer.Deserialize<RenameReply>(response.Payload!));
+        Assert.False(router.Dispatch(new(id, "rename", null, "client", [1, 2], 1)).Accepted);
     }
 
     [Fact]

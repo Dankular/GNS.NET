@@ -13,7 +13,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Automatically feed registered host/registry lifecycle events into the session journal.
   - [ ] Send a complete initial object graph when the journal retention window is exceeded.
 - [~] M1.2 Complete command/RPC framework
-  - [ ] Add typed command contracts.
+  - [x] Add typed MemoryPack command contracts.
   - [ ] Add targeted client routing.
   - [x] Add request timeout and expiry handling.
   - [ ] Add endpoint capability discovery.

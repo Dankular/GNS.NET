@@ -1,5 +1,7 @@
 namespace GnsNet;
 
+using MemoryPack;
+
 public enum NetworkObjectChangeKind { Spawned, Despawned, OwnershipTransferred }
 public readonly record struct NetworkObjectDescriptor(long ObjectId, int TypeId, string OwnerId, uint SpawnTick);
 public readonly record struct NetworkObjectChange(NetworkObjectChangeKind Kind, NetworkObjectDescriptor Object, string? PreviousOwner = null, string? Reason = null);
@@ -103,6 +105,23 @@ public sealed class RpcRouter
         if (!this.endpoints.TryAdd(endpoint, new(authority, handler))) throw new InvalidOperationException($"RPC '{endpoint}' is already registered.");
     }
     public void SetOwner(long objectId, string owner) => this.owners[objectId] = owner;
+    /// <summary>Registers a typed MemoryPack command while retaining the endpoint authority policy.</summary>
+    public void RegisterCommand<TRequest, TResponse>(string endpoint, RpcAuthority authority, Func<RpcRequest, TRequest, TResponse> handler)
+        where TRequest : IMemoryPackable<TRequest> where TResponse : IMemoryPackable<TResponse>
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        this.Register(endpoint, authority, request =>
+        {
+            try
+            {
+                TRequest? command = NetSerializer.Deserialize<TRequest>(request.Payload);
+                if (command is null) return new RpcResponse(request.RequestId, false, null, "Invalid command payload.");
+                return new RpcResponse(request.RequestId, true, NetSerializer.Serialize(handler(request, command)));
+            }
+            catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
+            { return new RpcResponse(request.RequestId, false, null, "Command handler rejected the request."); }
+        });
+    }
     public RpcResponse Dispatch(RpcRequest request, bool callerIsServer = false)
     {
         if (!this.endpoints.TryGetValue(request.Endpoint, out Endpoint? endpoint)) return new(request.RequestId, false, null, "Unknown endpoint.");
