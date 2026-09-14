@@ -199,6 +199,7 @@ Applications can use `GnsAuthoritativeServer<TSessionId, TState, TInput>` and
 
 Copyable server/client/contract/auth starting points are in [`templates/`](templates/README.md).
 An importable Grafana dashboard for the built-in OpenTelemetry meters is in [`docs/observability/gnsnet-grafana-dashboard.json`](docs/observability/gnsnet-grafana-dashboard.json).
+The compatibility and migration contract is documented in [`docs/compatibility.md`](docs/compatibility.md).
 
 ```csharp
 var server = new GnsAuthoritativeServer<string, WorldState, PlayerInput>(

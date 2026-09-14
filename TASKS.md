@@ -92,5 +92,5 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Add CI replay regression captures.
   - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (CI now runs a high-cardinality smoke profile; a full matrix remains open).
 - [ ] M6.4 Release compatibility
-  - [ ] Define compatibility and migration policy.
+  - [x] Define compatibility and migration policy.
   - [ ] Add migration tooling, package signing, and release smoke tests.
