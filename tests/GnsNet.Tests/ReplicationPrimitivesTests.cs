@@ -335,6 +335,39 @@ public sealed class ReplicationPrimitivesTests
         Assert.Equal((byte)allowed.ObjectId, despawn.Frame.Payload[1]);
     }
 
+    [Fact]
+    public void LifecycleScheduler_RefreshesIndependentClientSceneTeamAndOwnerViews()
+    {
+        var registry = new NetworkObjectRegistry<string>();
+        var scheduler = new LifecycleReplicationScheduler<string>(registry, 90, change => [(byte)change.Kind, (byte)change.Object.ObjectId]);
+        scheduler.AddClient("red"); scheduler.AddClient("blue");
+        var interest = new SpatialHashInterestManager<string, AoiEntity>();
+        interest.SetView("red", new(0, 0, 20)); interest.SetView("blue", new(0, 0, 20));
+        NetworkObjectDescriptor redEntity = registry.Spawn(1, "red", 1);
+        NetworkObjectDescriptor blueEntity = registry.Spawn(1, "blue", 1);
+        NetworkObjectDescriptor redOwnerEntity = registry.Spawn(1, "red", 1);
+        var world = new List<AoiEntity>
+        {
+            new(redEntity.ObjectId, 0, 0, "arena", "red", "red", true),
+            new(blueEntity.ObjectId, 1, 0, "arena", "blue", "blue", true),
+            new(redOwnerEntity.ObjectId, 2, 0, "arena", "red", "red", true)
+        };
+        var clientTeams = new Dictionary<string, string> { ["red"] = "red", ["blue"] = "blue" };
+        scheduler.ConfigureAutomaticVisibility(interest, () => world, x => x.ObjectId, x => (x.X, x.Y), x => x.Scene, x => x.Team, x => x.Owner,
+            _ => "arena", client => clientTeams[client], _ => null, x => x.Visible);
+
+        scheduler.Tick(1);
+        Assert.Equal(new[] { redEntity.ObjectId, redOwnerEntity.ObjectId }, scheduler.Drain("red", 10).Select(x => (long)x.Frame.Payload[1]));
+        Assert.Equal(new[] { blueEntity.ObjectId }, scheduler.Drain("blue", 10).Select(x => (long)x.Frame.Payload[1]));
+
+        clientTeams["red"] = "blue";
+        scheduler.Tick(2);
+        IReadOnlyList<(NetFrame Frame, NetChannel Channel)> redTransition = scheduler.Drain("red", 10);
+        Assert.Equal(3, redTransition.Count);
+        Assert.Equal(new[] { (byte)NetworkObjectChangeKind.Spawned, (byte)NetworkObjectChangeKind.Despawned, (byte)NetworkObjectChangeKind.Despawned }, redTransition.Select(x => x.Frame.Payload[0]));
+        Assert.Equal(blueEntity.ObjectId, (long)redTransition[0].Frame.Payload[1]);
+    }
+
     private readonly record struct AoiEntity(long ObjectId, float X, float Y, string Scene, string Team, string Owner, bool Visible);
 
     [Fact]
