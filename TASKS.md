@@ -40,7 +40,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Expose per-connection shed/drop decisions.
 - [ ] M2.4 Malformed-input property/fuzz suite
   - [x] Fuzz malformed snapshots and baseline loss.
-  - [~] Fuzz schema mismatch, tick wraparound, and partial entities (deterministic malformed snapshot corpus is covered; broader property/fuzzer integration remains open).
+  - [x] Exercise schema mismatch, tick wraparound, partial entities, and baseline loss with deterministic property-style corpus tests and bounded rejection assertions.
 
 ## M3 — Prediction and time
 
@@ -59,7 +59,7 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M4 — AOI and lag compensation
 
-- [ ] M4.1 Visibility-safe replication integration
+- [x] M4.1 Visibility-safe replication integration
   - [x] Enforce scene/team/owner/occlusion lifecycle ordering.
   - [x] Prevent hidden entities from entering serialized batches.
 - [ ] M4.2 Bounded hitbox budgets

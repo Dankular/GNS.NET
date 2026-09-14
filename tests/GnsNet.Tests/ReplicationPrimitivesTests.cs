@@ -180,6 +180,37 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void LifecycleScheduler_AutomaticAoiRefreshDrivesSpawnAndDespawnDelivery()
+    {
+        var registry = new NetworkObjectRegistry<string>();
+        var scheduler = new LifecycleReplicationScheduler<string>(registry, 90, change => [(byte)change.Kind, (byte)change.Object.ObjectId]);
+        scheduler.AddClient("a");
+        var visible = new HashSet<long>();
+        scheduler.ConfigureAutomaticVisibility(_ => visible);
+
+        NetworkObjectDescriptor hidden = registry.Spawn(2, "a", 1);
+        scheduler.Tick(2);
+        Assert.Empty(scheduler.Drain("a", 10));
+
+        visible.Add(hidden.ObjectId);
+        scheduler.Tick(3);
+        var spawn = Assert.Single(scheduler.Drain("a", 10));
+        Assert.Equal((byte)NetworkObjectChangeKind.Spawned, spawn.Frame.Payload[0]);
+        Assert.Equal((byte)hidden.ObjectId, spawn.Frame.Payload[1]);
+
+        visible.Clear();
+        scheduler.Tick(4);
+        var despawn = Assert.Single(scheduler.Drain("a", 10));
+        Assert.Equal((byte)NetworkObjectChangeKind.Despawned, despawn.Frame.Payload[0]);
+        Assert.Equal((byte)hidden.ObjectId, despawn.Frame.Payload[1]);
+
+        NetworkObjectDescriptor stillHidden = registry.Spawn(3, "a", 5);
+        Assert.NotEqual(hidden.ObjectId, stillHidden.ObjectId);
+        scheduler.Tick(6);
+        Assert.Empty(scheduler.Drain("a", 10));
+    }
+
+    [Fact]
     public void RewindAuthorization_ClampsOnlyWithinServerWindowAndRejectsFuture()
     {
         var auth = new RewindAuthorization(TimeSpan.FromSeconds(1)); DateTimeOffset now = DateTimeOffset.UtcNow;

@@ -8,6 +8,7 @@ public sealed class LifecycleReplicationScheduler<TClientId> where TClientId : n
     private readonly Dictionary<TClientId, PrioritySendQueue> queues = new();
     private readonly Func<NetworkObjectChange, byte[]> encode;
     private readonly byte opcode;
+    private Func<TClientId, IEnumerable<long>>? visibilityProvider;
     public LifecycleReplicationScheduler(NetworkObjectRegistry<TClientId> registry, byte opcode, Func<NetworkObjectChange, byte[]> encode)
     { this.registry = registry ?? throw new ArgumentNullException(nameof(registry)); this.opcode = opcode; this.encode = encode ?? throw new ArgumentNullException(nameof(encode)); this.registry.Changed += this.OnChanged; this.observers.Entered += this.OnEntered; this.observers.Left += this.OnLeft; }
     public void AddClient(TClientId client) { this.observers.Update(client, Array.Empty<long>()); this.queues.TryAdd(client, new PrioritySendQueue()); }
@@ -17,6 +18,20 @@ public sealed class LifecycleReplicationScheduler<TClientId> where TClientId : n
     {
         if (!this.queues.ContainsKey(client)) throw new InvalidOperationException("Client is not registered.");
         this.currentTick = tick; this.observers.Update(client, visible);
+    }
+    /// <summary>Registers the AOI query used to refresh every observer set during <see cref="Tick"/>.</summary>
+    public void ConfigureAutomaticVisibility(Func<TClientId, IEnumerable<long>> provider)
+        => this.visibilityProvider = provider ?? throw new ArgumentNullException(nameof(provider));
+    /// <summary>Runs the AOI pass and automatically delivers observer enter/leave lifecycle records.</summary>
+    public void Tick(uint tick)
+    {
+        if (this.visibilityProvider is null) throw new InvalidOperationException("Automatic visibility is not configured.");
+        this.currentTick = tick;
+        foreach (TClientId client in this.queues.Keys.ToArray())
+        {
+            IEnumerable<long> visible = this.visibilityProvider(client) ?? throw new InvalidOperationException("The automatic visibility provider returned null.");
+            this.observers.Update(client, visible);
+        }
     }
     public IReadOnlyList<(NetFrame Frame, NetChannel Channel)> Drain(TClientId client, int maxFrames)
         => this.queues.TryGetValue(client, out PrioritySendQueue? queue) ? queue.Drain(maxFrames) : [];
