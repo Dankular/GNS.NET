@@ -248,7 +248,7 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     public async ValueTask<bool> SendBatchAsync(GnsConnection connection, NetBatch batch, ESteamNetworkingSendType sendType, CancellationToken cancellationToken = default)
     {
         byte[] data = batch.Encode();
-        async ValueTask<bool> Deliver() { EResult result = this.server.Send(connection, data, sendType); bool ok = result == EResult.OK; this.RecordOutbound(connection, data, sendType, ok); return ok; }
+        ValueTask<bool> Deliver() { EResult result = this.server.Send(connection, data, sendType); bool ok = result == EResult.OK; this.RecordOutbound(connection, data, sendType, ok); return ValueTask.FromResult(ok); }
         if (this.Conditions is not null) { bool delivered = false; if (!await this.Conditions.DeliverAsync(async () => { delivered = await Deliver().ConfigureAwait(false); }, cancellationToken).ConfigureAwait(false)) { this.RecordOutbound(connection, data, sendType, false); return false; } return delivered; }
         return await Deliver().ConfigureAwait(false);
     }
@@ -345,7 +345,7 @@ public sealed class GnsClientHost
         where T : IMemoryPackable<T>
     {
         byte[] data = new NetFrame(opcode, tick, NetSerializer.Serialize(message)).Encode();
-        async ValueTask<bool> Deliver() { bool ok = this.transport.TrySend(data, channel.SendType()); this.Metrics.RecordOut(data.Length, ok); this.Recorder?.Record(true, data, connectionId: "client", channel: channel); return ok; }
+        ValueTask<bool> Deliver() { bool ok = this.transport.TrySend(data, channel.SendType()); this.Metrics.RecordOut(data.Length, ok); this.Recorder?.Record(true, data, connectionId: "client", channel: channel); return ValueTask.FromResult(ok); }
         if (this.Conditions is not null) { bool delivered = false; if (!await this.Conditions.DeliverAsync(async () => { delivered = await Deliver().ConfigureAwait(false); }, cancellationToken).ConfigureAwait(false)) { this.Metrics.RecordOut(data.Length, false); return false; } return delivered; }
         return await Deliver().ConfigureAwait(false);
     }
