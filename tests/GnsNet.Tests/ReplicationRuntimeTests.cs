@@ -51,5 +51,6 @@ public sealed class ReplicationRuntimeTests
         Assert.True((await request.Completion).Accepted); Assert.Equal(0, tracker.PendingCount);
         using var cts = new CancellationTokenSource(); var cancelled = tracker.Create(cts.Token); cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.Completion); Assert.Equal(0, tracker.PendingCount);
+        var timed = tracker.Create(TimeSpan.FromMilliseconds(10)); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => timed.Completion); Assert.Equal(0, tracker.PendingCount);
     }
 }

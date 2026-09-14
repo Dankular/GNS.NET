@@ -6,14 +6,15 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M1 — Replication lifecycle
 
-- [ ] M1.1 Automatic reconnect object-graph rehydration
-  - [ ] Persist authoritative lifecycle history per session.
-  - [ ] Replay spawn, ownership, and despawn records after resumption.
-  - [ ] Verify ordering and duplicate suppression during reconnect.
-- [ ] M1.2 Complete command/RPC framework
+- [~] M1.1 Automatic reconnect object-graph rehydration
+  - [x] Persist bounded authoritative lifecycle history per session.
+  - [x] Replay spawn, ownership, and despawn records after resumption.
+  - [x] Verify ordering and duplicate suppression during replay.
+  - [ ] Automatically feed every host/registry lifecycle event into the session journal.
+- [~] M1.2 Complete command/RPC framework
   - [ ] Add typed command contracts.
   - [ ] Add targeted client routing.
-  - [ ] Add request timeout and expiry handling.
+  - [x] Add request timeout and expiry handling.
   - [ ] Add endpoint capability discovery.
 - [ ] M1.3 Room/scene lifecycle integration
   - [ ] Add scene transition records.

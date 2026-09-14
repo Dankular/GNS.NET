@@ -125,6 +125,13 @@ public sealed class RpcRequestTracker
         if (cancellationToken.CanBeCanceled) cancellationToken.Register(() => Cancel(id));
         return (id, completion.Task);
     }
+    public (Guid RequestId, Task<RpcResponse> Completion) Create(TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
+        (Guid id, Task<RpcResponse> completion) request = this.Create(cancellationToken);
+        _ = Task.Delay(timeout).ContinueWith(_ => this.Cancel(request.id), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        return request;
+    }
     public bool Complete(RpcResponse response) { lock (this.sync) if (!this.pending.Remove(response.RequestId, out var completion)) return false; else return completion.TrySetResult(response); }
     public bool Cancel(Guid id) { lock (this.sync) if (!this.pending.Remove(id, out var completion)) return false; else return completion.TrySetCanceled(); }
 }
