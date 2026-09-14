@@ -4,7 +4,7 @@ services:
       context: ..
       dockerfile: docker/native-ci.Dockerfile
       args:
-        GNS_REF: ${GNS_REF:-master}
+        GNS_REF: ${GNS_REF:-a424b7db649438acafb60c99cae6667587c42732}
     environment:
       LD_LIBRARY_PATH: /opt/gns/lib
     volumes:

@@ -6,7 +6,9 @@ RUN apt-get update \
 
 ARG GNS_REF=master
 WORKDIR /src
-RUN git clone --depth 1 --branch ${GNS_REF} https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets \
+RUN git clone --filter=blob:none https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets \
+    && git -C native/GameNetworkingSockets fetch --depth 1 origin "${GNS_REF}" \
+    && git -C native/GameNetworkingSockets checkout --detach FETCH_HEAD \
     && cmake -S native/GameNetworkingSockets -B native/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DGNS_BUILD_EXAMPLES=OFF \
     && cmake --build native/build --parallel \
     && mkdir -p /opt/gns/lib \

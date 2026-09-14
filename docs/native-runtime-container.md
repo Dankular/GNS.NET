@@ -18,6 +18,10 @@ $env:GNS_REF = "<known-good-commit>"
 docker compose -f docker/docker-compose.native.yml build
 ```
 
+`GNS_REF` accepts a branch, tag, or raw GameNetworkingSockets commit SHA. The Dockerfile fetches
+and checks out the requested ref explicitly, so VPS runs can use the same reviewed commit as hosted
+CI instead of silently building the default branch.
+
 The container is intentionally a verification harness, not a production game-server image. Do not
 put PlayFab, Steamworks, or TURN secrets in the image or compose file. Native traversal still needs
 separate public-network peers and relay credentials; a local container can verify loading, handshake,
