@@ -252,10 +252,16 @@ jobs:
     - name: Install native dependencies
       shell: pwsh
       run: |
-        $process = Start-Process -FilePath vcpkg -ArgumentList @("install", "--triplet", "x64-windows", "--debug") -WorkingDirectory (Get-Location) -NoNewWindow -PassThru
-        if (-not $process.WaitForExit(30 * 60 * 1000)) {
-          $process.Kill($true)
-          throw "vcpkg dependency installation exceeded 30 minutes"
+        $vcpkg = (Get-Command vcpkg.exe -ErrorAction Stop).Source
+        $process = Start-Process -FilePath $vcpkg -ArgumentList @("install", "--triplet", "x64-windows", "--debug") -WorkingDirectory (Get-Location) -NoNewWindow -PassThru
+        $deadline = [DateTime]::UtcNow.AddMinutes(30)
+        while (-not $process.HasExited) {
+          if ([DateTime]::UtcNow -ge $deadline) {
+            & taskkill.exe /PID $process.Id /T /F 2>$null
+            throw "vcpkg dependency installation exceeded 30 minutes"
+          }
+          Start-Sleep -Seconds 5
+          $process.Refresh()
         }
         if ($process.ExitCode -ne 0) { throw "vcpkg dependency installation failed with exit code $($process.ExitCode)" }
       working-directory: native/GameNetworkingSockets
