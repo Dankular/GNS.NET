@@ -95,6 +95,34 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void HitboxHistory_RaycastSubTickForClientAuthorizesAndFiltersTargets()
+    {
+        var history = new HitboxRewindHistory();
+        history.Record(10, [new RewindHitbox(7, 5, 0, 1), new RewindHitbox(8, 6, 0, 1)]);
+        history.Record(11, [new RewindHitbox(7, 7, 0, 1), new RewindHitbox(8, 8, 0, 1)]);
+        var viewTimes = new RewindViewTimeRegistry<string>();
+        var authorization = new RewindAuthorization(TimeSpan.FromSeconds(2));
+        DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);
+
+        Assert.Empty(history.RaycastSubTickForClient("shooter", now, viewTimes, authorization, _ => 10.5, id => id == 7, 0, 0, 1, 0, 20));
+        viewTimes.Record("shooter", now.AddSeconds(-1));
+        IReadOnlyList<RewindHit> hits = history.RaycastSubTickForClient("shooter", now, viewTimes, authorization, _ => 10.5, id => id == 7, 0, 0, 1, 0, 20);
+        Assert.Equal(1, hits.Count);
+        Assert.Equal(7, hits[0].EntityId);
+        Assert.Equal((uint)10, hits[0].Tick);
+    }
+
+    [Fact]
+    public void HitboxHistory_RaycastSubTickForClientRejectsExpiredAndFutureViewTimes()
+    {
+        var history = new HitboxRewindHistory(); history.Record(10, [new RewindHitbox(7, 5, 0, 1)]);
+        var viewTimes = new RewindViewTimeRegistry<string>(); var authorization = new RewindAuthorization(TimeSpan.FromSeconds(2)); DateTimeOffset now = DateTimeOffset.UnixEpoch.AddSeconds(10);
+        viewTimes.Record("expired", now.AddSeconds(-3)); viewTimes.Record("future", now.AddSeconds(1));
+        Assert.Empty(history.RaycastSubTickForClient("expired", now, viewTimes, authorization, _ => 10, null, 0, 0, 1, 0, 20));
+        Assert.Empty(history.RaycastSubTickForClient("future", now, viewTimes, authorization, _ => 10, null, 0, 0, 1, 0, 20));
+    }
+
+    [Fact]
     public void ObserverTracker_EmitsOnlyEnterAndLeaveTransitions()
     {
         var tracker = new ObserverTracker<int, int>(); var entered = new List<int>(); var left = new List<int>(); tracker.Entered += (_, entity) => entered.Add(entity); tracker.Left += (_, entity) => left.Add(entity);
