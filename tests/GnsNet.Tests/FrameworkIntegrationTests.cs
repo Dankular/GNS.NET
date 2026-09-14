@@ -178,6 +178,16 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void ComponentDirtyTracker_TracksComponentsIndependently()
+    {
+        var tracker = new ComponentDirtyTracker<TestEntity>();
+        static IReadOnlyList<byte[]> Components(TestEntity entity) => [BitConverter.GetBytes(entity.X), BitConverter.GetBytes(entity.Y)];
+        Assert.Single(tracker.Collect(new[] { new TestEntity { X = 1, Y = 2 } }, _ => "entity", Components));
+        Assert.Empty(tracker.Collect(new[] { new TestEntity { X = 1, Y = 2 } }, _ => "entity", Components));
+        Assert.Single(tracker.Collect(new[] { new TestEntity { X = 1, Y = 3 } }, _ => "entity", Components));
+    }
+
+    [Fact]
     public void AutomaticSnapshotScheduler_BatchesLifecycleRecordsOnReliableChannel()
     {
         var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(new InterestManager<string, TestEntity>(), new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));

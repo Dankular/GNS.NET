@@ -5,22 +5,27 @@ using MemoryPack;
 /// <summary>Tracks serialized component state and returns only entities whose state changed since the last tick.</summary>
 public sealed class ComponentDirtyTracker<TEntity> where TEntity : IMemoryPackable<TEntity>
 {
-    private readonly Dictionary<string, byte[]> fingerprints = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, byte[][]> fingerprints = new(StringComparer.Ordinal);
     public int TrackedCount => this.fingerprints.Count;
     public int LastChangedCount { get; private set; }
 
     /// <summary>Returns all entities on their first observation and changed entities thereafter.</summary>
     public IReadOnlyList<TEntity> Collect(IEnumerable<TEntity> entities, Func<TEntity, string> keySelector)
+        => this.Collect(entities, keySelector, entity => new[] { NetSerializer.Serialize(entity) });
+
+    /// <summary>Returns entities with at least one changed component fingerprint.</summary>
+    public IReadOnlyList<TEntity> Collect(IEnumerable<TEntity> entities, Func<TEntity, string> keySelector, Func<TEntity, IReadOnlyList<byte[]>> componentEncoder)
     {
-        ArgumentNullException.ThrowIfNull(entities); ArgumentNullException.ThrowIfNull(keySelector);
+        ArgumentNullException.ThrowIfNull(entities); ArgumentNullException.ThrowIfNull(keySelector); ArgumentNullException.ThrowIfNull(componentEncoder);
         var currentKeys = new HashSet<string>(StringComparer.Ordinal);
         var changed = new List<TEntity>();
         foreach (TEntity entity in entities)
         {
             string key = keySelector(entity) ?? throw new InvalidDataException("Dirty-tracked entity key cannot be null.");
             if (!currentKeys.Add(key)) throw new InvalidOperationException($"Duplicate dirty-tracked entity key '{key}'.");
-            byte[] fingerprint = NetSerializer.Serialize(entity);
-            if (!this.fingerprints.TryGetValue(key, out byte[]? previous) || !fingerprint.AsSpan().SequenceEqual(previous)) changed.Add(entity);
+            IReadOnlyList<byte[]> components = componentEncoder(entity) ?? throw new InvalidDataException("Dirty component encoder returned null.");
+            byte[][] fingerprint = components.Select(component => component?.ToArray() ?? throw new InvalidDataException("Dirty component payload cannot be null.")).ToArray();
+            if (!this.fingerprints.TryGetValue(key, out byte[][]? previous) || fingerprint.Length != previous.Length || fingerprint.Where((component, index) => !component.AsSpan().SequenceEqual(previous[index])).Any()) changed.Add(entity);
             this.fingerprints[key] = fingerprint;
         }
         foreach (string key in this.fingerprints.Keys.Where(key => !currentKeys.Contains(key)).ToArray()) this.fingerprints.Remove(key);
@@ -76,6 +81,7 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
     private Func<TClientId, float>? relevanceProvider;
     private ComponentDirtyTracker<TEntity>? dirtyTracker;
     private Func<TEntity, string>? dirtyKeySelector;
+    private Func<TEntity, IReadOnlyList<byte[]>>? dirtyComponentEncoder;
     private byte entityOpcode;
     private byte snapshotOpcode;
     public AutomaticSnapshotScheduler(SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline) => this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
@@ -98,11 +104,17 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
         this.ConfigureAutoTick(world, snapshot, relevance, entityOpcode, snapshotOpcode);
         this.dirtyTracker = new ComponentDirtyTracker<TEntity>(); this.dirtyKeySelector = entityKey ?? throw new ArgumentNullException(nameof(entityKey));
     }
+    /// <summary>Configures automatic ticks with explicit component fingerprints for granular dirty scheduling.</summary>
+    public void ConfigureAutoTick(Func<IEnumerable<TEntity>> world, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode, Func<TEntity, string> entityKey, Func<TEntity, IReadOnlyList<byte[]>> componentEncoder)
+    {
+        this.ConfigureAutoTick(world, snapshot, relevance, entityOpcode, snapshotOpcode, entityKey);
+        this.dirtyComponentEncoder = componentEncoder ?? throw new ArgumentNullException(nameof(componentEncoder));
+    }
     public void Tick(uint tick)
     {
         if (this.worldProvider is null || this.snapshotProvider is null || this.relevanceProvider is null) throw new InvalidOperationException("Automatic tick is not configured.");
         IEnumerable<TEntity> world = this.worldProvider();
-        IReadOnlyList<TEntity> entities = this.dirtyTracker is null ? world.ToArray() : this.dirtyTracker.Collect(world, this.dirtyKeySelector!);
+        IReadOnlyList<TEntity> entities = this.dirtyTracker is null ? world.ToArray() : this.dirtyTracker.Collect(world, this.dirtyKeySelector!, this.dirtyComponentEncoder ?? (entity => new[] { NetSerializer.Serialize(entity) }));
         this.Publish(entities, this.snapshotProvider, this.relevanceProvider, this.entityOpcode, this.snapshotOpcode, tick);
     }
     public void PublishLifecycle(IEnumerable<NetworkObjectChange> changes, byte opcode, uint tick, Func<NetworkObjectChange, byte[]> encoder, float relevance = 1f)
