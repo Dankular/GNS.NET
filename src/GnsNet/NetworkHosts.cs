@@ -89,7 +89,13 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     }
     private int SendRehydration(TSessionId session, GnsConnection connection, byte opcode, Func<NetworkObjectChange, byte[]> encoder, uint tick)
     {
-        int sent = 0; foreach (NetworkObjectChange change in this.Sessions.Rehydration.Snapshot(session)) if (this.server.Send(connection, new NetFrame(opcode, tick, encoder(change)).Encode(), ESteamNetworkingSendType.Reliable) == EResult.OK) sent++; return sent;
+        int sent = 0;
+        if (this.lifecycleRegistry is not null && this.Sessions.Rehydration.RequiresBaseline(session))
+            foreach (NetworkObjectChange change in this.lifecycleRegistry.SnapshotChanges())
+                if (this.server.Send(connection, new NetFrame(opcode, tick, encoder(change)).Encode(), ESteamNetworkingSendType.Reliable) == EResult.OK) sent++;
+        foreach (NetworkObjectChange change in this.Sessions.Rehydration.Snapshot(session))
+            if (this.server.Send(connection, new NetFrame(opcode, tick, encoder(change)).Encode(), ESteamNetworkingSendType.Reliable) == EResult.OK) sent++;
+        return sent;
     }
     public bool Admit(GnsConnection connection, string token)
     {

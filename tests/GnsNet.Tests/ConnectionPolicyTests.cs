@@ -151,6 +151,16 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void SessionRehydration_ReportsRetentionOverflowForBaselineFallback()
+    {
+        var buffer = new SessionRehydrationBuffer<string>(2); var entity = new NetworkObjectDescriptor(1, 1, "a", 1);
+        buffer.Record("s", new(NetworkObjectChangeKind.Spawned, entity));
+        buffer.Record("s", new(NetworkObjectChangeKind.OwnershipTransferred, entity with { OwnerId = "b" }, "a"));
+        buffer.Record("s", new(NetworkObjectChangeKind.OwnershipTransferred, entity with { OwnerId = "c" }, "b"));
+        Assert.True(buffer.RequiresBaseline("s")); buffer.Clear("s"); Assert.False(buffer.RequiresBaseline("s"));
+    }
+
+    [Fact]
     public void SessionGraceTracker_ExposesGraceTrackedSessionsForLifecycleJournaling()
     {
         var tracker = new SessionGraceTracker<string>(TimeSpan.FromMinutes(1)); tracker.MarkDisconnected("s", DateTimeOffset.UtcNow);

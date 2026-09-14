@@ -5,6 +5,7 @@ public sealed class SessionRehydrationBuffer<TSessionId> where TSessionId : notn
 {
     private readonly int capacity;
     private readonly Dictionary<TSessionId, Queue<NetworkObjectChange>> records = new();
+    private readonly HashSet<TSessionId> truncated = new();
     private readonly object sync = new();
     public SessionRehydrationBuffer(int capacity = 4096) { if (capacity < 1) throw new ArgumentOutOfRangeException(nameof(capacity)); this.capacity = capacity; }
     public void Record(TSessionId session, NetworkObjectChange change)
@@ -12,9 +13,11 @@ public sealed class SessionRehydrationBuffer<TSessionId> where TSessionId : notn
         lock (this.sync)
         {
             if (!this.records.TryGetValue(session, out Queue<NetworkObjectChange>? history)) this.records[session] = history = new();
-            history.Enqueue(change); while (history.Count > this.capacity) history.Dequeue();
+            history.Enqueue(change);
+            if (history.Count > this.capacity) { history.Dequeue(); this.truncated.Add(session); }
         }
     }
+    public bool RequiresBaseline(TSessionId session) { lock (this.sync) return this.truncated.Contains(session); }
     public IReadOnlyList<NetworkObjectChange> Snapshot(TSessionId session) { lock (this.sync) return this.records.TryGetValue(session, out Queue<NetworkObjectChange>? history) ? history.ToArray() : []; }
     public int Replay(TSessionId session, NetworkObjectRegistry<string> clientRegistry)
     {
@@ -22,5 +25,5 @@ public sealed class SessionRehydrationBuffer<TSessionId> where TSessionId : notn
         foreach (NetworkObjectChange change in this.Snapshot(session)) if (clientRegistry.Apply(change)) applied++;
         return applied;
     }
-    public void Clear(TSessionId session) { lock (this.sync) this.records.Remove(session); }
+    public void Clear(TSessionId session) { lock (this.sync) { this.records.Remove(session); this.truncated.Remove(session); } }
 }

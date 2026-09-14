@@ -13,6 +13,8 @@ public sealed class NetworkObjectRegistry<TClientId> where TClientId : notnull
     private long nextId = 1;
     public IReadOnlyCollection<NetworkObjectDescriptor> Objects => this.objects.Values.ToArray();
     public event Action<NetworkObjectChange>? Changed;
+    public IReadOnlyCollection<NetworkObjectChange> SnapshotChanges()
+        => this.objects.Values.OrderBy(x => x.ObjectId).Select(x => new NetworkObjectChange(NetworkObjectChangeKind.Spawned, x)).ToArray();
 
     public NetworkObjectDescriptor Spawn(int typeId, TClientId owner, uint tick)
     {

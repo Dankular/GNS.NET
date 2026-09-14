@@ -14,6 +14,7 @@ public sealed partial class ReplicationRuntimeTests
         var registry = new NetworkObjectRegistry<string>(); var changes = new List<NetworkObjectChange>(); registry.Changed += changes.Add;
         NetworkObjectDescriptor spawned = registry.Spawn(7, "alice", 10);
         Assert.True(registry.TransferOwnership(spawned.ObjectId, "bob"));
+        Assert.Equal(new[] { new NetworkObjectChange(NetworkObjectChangeKind.Spawned, spawned with { OwnerId = "bob" }) }, registry.SnapshotChanges());
         Assert.True(registry.Despawn(spawned.ObjectId, "match-ended"));
         Assert.Equal(new[] { NetworkObjectChangeKind.Spawned, NetworkObjectChangeKind.OwnershipTransferred, NetworkObjectChangeKind.Despawned }, changes.Select(x => x.Kind));
         Assert.Equal("bob", changes[1].Object.OwnerId); Assert.Equal("alice", changes[1].PreviousOwner);
