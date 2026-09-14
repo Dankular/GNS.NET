@@ -62,7 +62,7 @@ means a supported partial implementation or an external validation dependency; `
 - [x] M4.1 Visibility-safe replication integration
   - [x] Enforce scene/team/owner/occlusion lifecycle ordering.
   - [x] Prevent hidden entities from entering serialized batches.
-- [ ] M4.2 Bounded hitbox budgets
+- [x] M4.2 Bounded hitbox budgets
   - [x] Add memory/retention budgets and rejection metrics.
 - [ ] M4.3 Authoritative shooter rewind integration
   - [x] Bind measured per-client view time to rewind queries.
@@ -98,4 +98,4 @@ means a supported partial implementation or an external validation dependency; `
   - [~] Add connection, room, entity, payload, impairment, and reconnect-storm ramps (CI now runs a high-cardinality smoke profile; a full matrix remains open).
 - [ ] M6.4 Release compatibility
   - [x] Define compatibility and migration policy.
-  - [~] Add migration tooling, package signing, and release smoke tests (package/consumer smoke is automated; migration conversion and signing remain open).
+  - [~] Add migration tooling, package signing, and release smoke tests (manifest validation, opt-in NuGet signing support, and package/consumer smoke are automated; coordinated data conversion and trusted certificate provisioning remain operational responsibilities).
