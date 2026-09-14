@@ -184,7 +184,7 @@ public sealed class GnsServer : IDisposable
                 if (this.sockets.AcceptConnection(status.Conn) == EResult.OK)
                 {
                     this.sockets.SetConnectionPollGroup(status.Conn, this.pollGroup);
-                    var connection = new GnsConnection(status.Conn);
+                    var connection = new GnsConnection(status.Conn) { Sockets = this.sockets };
                     this.connections[status.Conn.Handle] = connection;
                 }
 

@@ -112,7 +112,7 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
             }
             catch (Exception exception) when (exception is InvalidDataException or ArgumentException or OverflowException)
             { this.server.Reject(message.Connection, "Malformed network frame"); }
-            this.Metrics.RecordIn(message.Data.Length); this.MetricsByConnection.GetOrAdd(message.Connection.Handle.Handle, _ => new()).RecordIn(message.Data.Length); this.Recorder?.Record(false, message.Data, connectionId: message.Connection.Handle.Handle.ToString());
+            this.Metrics.RecordIn(message.Data.Length); this.MetricsByConnection.GetOrAdd(message.Connection.Handle.Handle, _ => new()).RecordIn(message.Data.Length); GnsTelemetry.RecordInbound(message.Data.Length, message.Connection.Handle.Handle.ToString()); this.Recorder?.Record(false, message.Data, connectionId: message.Connection.Handle.Handle.ToString());
         }
         this.Heartbeats?.Poll();
         this.SendHeartbeatProbes();
@@ -174,7 +174,7 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
         where T : IMemoryPackable<T>
     { byte[] data = new NetFrame(opcode, tick, NetSerializer.Serialize(message)).Encode(); EResult result = this.server.Send(connection, data, sendType); this.RecordOutbound(connection, data, sendType, result == EResult.OK); return result; }
     private void RecordOutbound(GnsConnection connection, byte[] data, ESteamNetworkingSendType sendType, bool delivered)
-    { this.Metrics.RecordOut(data.Length, delivered); this.MetricsByConnection.GetOrAdd(connection.Handle.Handle, _ => new()).RecordOut(data.Length, delivered); this.Recorder?.Record(true, data, connectionId: connection.Handle.Handle.ToString(), channel: sendType == ESteamNetworkingSendType.Reliable ? NetChannel.Event : NetChannel.State); }
+    { this.Metrics.RecordOut(data.Length, delivered); this.MetricsByConnection.GetOrAdd(connection.Handle.Handle, _ => new()).RecordOut(data.Length, delivered); if (delivered) GnsTelemetry.RecordOutbound(data.Length, connection.Handle.Handle.ToString()); else GnsTelemetry.RecordDrop(connection.Handle.Handle.ToString()); this.Recorder?.Record(true, data, connectionId: connection.Handle.Handle.ToString(), channel: sendType == ESteamNetworkingSendType.Reliable ? NetChannel.Event : NetChannel.State); }
     public void Broadcast<T>(byte opcode, uint tick, T message, ESteamNetworkingSendType sendType)
         where T : IMemoryPackable<T>
     { byte[] data = new NetFrame(opcode, tick, NetSerializer.Serialize(message)).Encode(); foreach (GnsConnection connection in this.server.Connections) { EResult result = this.server.Send(connection, data, sendType); this.RecordOutbound(connection, data, sendType, result == EResult.OK); } }

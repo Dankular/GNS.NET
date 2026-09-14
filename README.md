@@ -11,6 +11,10 @@ AOI/delta/priority snapshot delivery, diagnostics, replay, scaling, and backend/
 High-level frames carry both protocol and MemoryPack schema revisions and reject unsupported revisions
 before deserialization.
 
+The forward-looking capability roadmap and comparison against Unity Netcode, Photon Fusion, FishNet,
+Mirror, Unreal Iris, Godot, and Valve GNS is in [MILESTONES.md](MILESTONES.md). It separates the
+implemented primitives from the remaining higher-level replication runtime work.
+
 ## What's in `GnsNet`
 
 | Type | What it's for |
@@ -379,6 +383,37 @@ var lifecycle = new ShardLifecycle<string, string>(TimeSpan.FromMinutes(1));
 var coordinator = new ShardProcessCoordinator<string, string>(processController, lifecycle, transfer);
 await coordinator.MigrateAsync("player-42", shard);
 ```
+
+### Replication runtime primitives
+
+The framework also exposes engine-neutral lifecycle, room, RPC, prediction, AOI, rewind, and
+transport operations. These are designed to be composed by a game adapter rather than hidden in
+the transport:
+
+```csharp
+var objects = new NetworkObjectRegistry<string>();
+NetworkObjectDescriptor player = objects.Spawn(typeId: 7, owner: "player-42", tick: 10);
+objects.TransferOwnership(player.ObjectId, "server");
+
+var room = new RoomLifecycle<string>(maxPlayers: 16) { AllowLateJoin = true };
+room.Join("player-42"); room.SetReady("player-42", true); room.Start(); room.BeginGame();
+
+var ticks = new TickRateCoordinator(serverHz: 60);
+ticks.ApplyServerClock(serverTick: 120, serverHz: 60);
+int catchUp = ticks.TicksToSimulate(localTick: 117);
+
+var lanes = connection.ConfigureLanes([0, 10], [1, 1]);
+NativeConnectionStatistics native = connection.GetStatistics();
+```
+
+For high-volume snapshots, `ParallelSnapshotEncoder` shares immutable encoded results across
+connections and `SpatialHashInterestManager` supports distance plus scene/team/visibility rules.
+`HitboxRewindHistory` provides bounded authoritative 2D rewind queries. `GnsTelemetry` emits
+OpenTelemetry-compatible activities and meters for bytes, drops, RTT, and pending reliable data.
+
+P2P deployments can use `HttpP2PSignalingClient` with a backend-issued bearer token to exchange
+short-lived signals and TURN credentials, then use `P2PTraversalTester` in CI to verify direct and
+relay fallback paths. The signaling service must never expose long-lived TURN secrets to clients.
 
 ## Prerequisites
 

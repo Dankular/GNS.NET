@@ -30,7 +30,7 @@ public sealed class GnsClient : IDisposable
         this.connectionHandle = connectionHandle;
         this.statusChangedCallback = statusChangedCallback;
         this.messageBuffer = new IntPtr[maxMessagesPerPoll];
-        this.Connection = new GnsConnection(connectionHandle);
+        this.Connection = new GnsConnection(connectionHandle) { Sockets = sockets };
     }
 
     /// <summary>Raised once the connection reaches the <c>Connected</c> state.</summary>

@@ -13,6 +13,7 @@ if (options.Scenario is "playfab") await RunPlayFab(options);
 if (options.Scenario is "all" or "batch") Run("NetBatch encode + decode", options, BenchmarkBatch);
 if (options.Scenario is "all" or "pipeline") Run("AOI + delta + priority snapshot pipeline", options, BenchmarkPipeline);
 if (options.Scenario is "all" or "prediction") Run("client prediction reconciliation", options, BenchmarkPrediction);
+if (options.Scenario is "all" or "replay") Run("persisted capture replay", options, BenchmarkReplay);
 
 static void Run(string name, BenchmarkOptions options, Func<BenchmarkOptions, BenchmarkResult> benchmark)
 {
@@ -182,6 +183,21 @@ static BenchmarkResult BenchmarkPrediction(BenchmarkOptions options)
     return new(operations, 0, timer.Elapsed, GC.GetAllocatedBytesForCurrentThread() - before);
 }
 
+static BenchmarkResult BenchmarkReplay(BenchmarkOptions options)
+{
+    var recorder = new NetworkRecorder();
+    for (int i = 0; i < options.Iterations; i++) recorder.Record(true, BitConverter.GetBytes(i), DateTimeOffset.UnixEpoch.AddTicks(i));
+    string path = Path.Combine(Path.GetTempPath(), $"gnsnet-ci-{Guid.NewGuid():N}.gnsr"); Stopwatch timer = Stopwatch.StartNew();
+    try
+    {
+        recorder.SaveAsync(path).GetAwaiter().GetResult(); NetworkRecorder loaded = NetworkRecorder.LoadAsync(path).GetAwaiter().GetResult();
+        int delivered = loaded.ReplayTransportAsync(_ => ValueTask.FromResult(true), speed: double.MaxValue).GetAwaiter().GetResult(); timer.Stop();
+        if (delivered != options.Iterations) throw new InvalidDataException("Replay did not deliver every captured packet.");
+        return new(delivered, loaded.Packets.Sum(x => (long)x.Data.Length), timer.Elapsed, GC.GetAllocatedBytesForCurrentThread());
+    }
+    finally { if (File.Exists(path)) File.Delete(path); }
+}
+
 static NetBatch CreateBatch(int count)
 {
     var batch = new NetBatch();
@@ -202,7 +218,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         string scenario = Value(args, "--scenario") ?? "all";
         int clients = Number(args, "--clients", 16), entities = Number(args, "--entities", 1_000), iterations = Number(args, "--iterations", 10_000), payload = Number(args, "--payload-bytes", 128);
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
-        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "transport" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, transport, or playfab.");
+        if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, or playfab.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
         return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase));
     }

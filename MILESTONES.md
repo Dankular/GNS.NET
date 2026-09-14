@@ -1,0 +1,119 @@
+# GNS.NET milestones and gap analysis
+
+This roadmap compares GNS.NET with production networking stacks and turns the gaps into testable milestones. Existing transport, authentication, authoritative simulation, prediction helpers, snapshot buffering, AOI/delta/priority delivery, replay, scaling, and PlayFab flows are documented in [README.md](README.md) and tracked in [TODO.md](TODO.md). The items below are new framework-level gaps, not claims that an interface-only placeholder is complete.
+
+## Findings from comparable libraries
+
+| Capability seen in other stacks | Evidence | GNS.NET gap |
+| --- | --- | --- |
+| Network-object lifecycle and remote actions | [Mirror Network Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-manager), [Mirror communications](https://mirror-networking.gitbook.io/docs/manual/guides/communications) | No built-in network object IDs, spawn/despawn, ownership, commands, RPCs, or request/reply correlation. Applications currently define these on top of frames. |
+| Scene, room, and observer lifecycle | [Mirror Room Manager](https://mirror-networking.gitbook.io/docs/manual/components/network-room-manager), [Mirror scene interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management/scene) | No framework room state machine, ready/start lock, late-join policy, scene transition protocol, or scene/team observer conditions. |
+| Full rollback prediction loop | [Unity Netcode prediction](https://docs.unity.cn/Packages/com.unity.netcode%401.0/manual/prediction.html) | Prediction stores inputs and reconciles a supplied state, but does not own a tick-synchronised rollback world, deterministic resimulation budget, prediction smoothing, or misprediction telemetry. |
+| Network time and tick coordination | [Photon Fusion time synchronization](https://doc.photonengine.com/fusion/v2/manual/advanced/time-synchronization) | No measured server-time offset, clock drift estimator, tick-rate negotiation, or client catch-up/slow-down policy. |
+| Quantized replicated state and extrapolation | [Unity ghost snapshots](https://docs.unity.cn/Packages/com.unity.netcode%401.1/manual/ghost-snapshots.html) | MemoryPack is real serialization, but there is no framework schema for field masks, quantization, compression, entity lifecycle deltas, or bounded extrapolation/smoothing. |
+| Spatially scalable observers | [FishNet observers](https://fish-networking.gitbook.io/docs/guides/features/observers), [Mirror interest management](https://mirror-networking.gitbook.io/docs/manual/interest-management) | AOI exists as distance culling, but there is no spatial hash, scene/team/visibility condition composition, observer enter/leave events, or automatic visibility-safe spawn/despawn. |
+| Sub-tick lag compensation | [Photon Fusion lag compensation](https://doc.photonengine.com/fusion/v2/manual/advanced/lag-compensation) | History lookup/interpolation exists, but no registered hitbox world, rewind query API, sub-tick ray/sphere/box queries, or per-client rewind limits. |
+| Replication scheduling and parallel work | [Unreal Iris components](https://dev.epicgames.com/documentation/en-us/unreal-engine/components-of-iris-in-unreal-engine) | Snapshot pipeline is functional but single-path; no shared encode cache, dependency graph, parallel preparation, per-connection budgets, or prioritised dirty-component scheduler. |
+| Explicit authority and RPC modes | [Godot high-level multiplayer](https://docs.godotengine.org/en/stable/tutorials/networking/high_level_multiplayer.html) | No declarative authority mode, call-local policy, endpoint capability, or automatic rejection of invalid remote method calls. |
+| Native transport diagnostics and lanes | [Valve GameNetworkingSockets](https://github.com/ValveSoftware/GameNetworkingSockets) | Framework metrics are application-level; native detailed connection stats and `ConfigureConnectionLanes` are not exposed through a stable GNS.NET diagnostics/scheduling API. |
+| P2P rendezvous and relay operation | [Valve P2P requirements](https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/README_P2P.md) | ConnectP2P/ListenP2P wrappers and ICE settings exist, but no production signaling service, TURN/relay provider adapter, rendezvous protocol, or traversal test matrix. |
+
+## Cross-check against `GS/codex(7).md`
+
+The GS plan is a separate self-hosted PlayFab-like backend built around Nakama, Agones, PostgreSQL,
+and a declarative control plane. It already plans the following adjacent capabilities:
+
+| GS plan coverage | Relationship to this roadmap | Ownership decision |
+| --- | --- | --- |
+| Nakama identity, matchmaking tickets, Agones allocation, match lifecycle, join claims, and authoritative result submission | Overlaps GNS.NET's account/lobby adapters and the session/room boundary in M1. | GS owns product matchmaking/allocation and match claims. GNS.NET owns realtime admission, connection/session binding, and gameplay transport after a claim is presented. |
+| Server-authoritative dedicated match simulation | Adjacent to M1-M4, but the GS document intentionally does not define moment-to-moment simulation or replication. | GS owns server process/product lifecycle. The game server using GNS.NET owns simulation and GNS.NET provides the engine-neutral replication runtime. |
+| HTTP/gRPC APIs, generated OpenAPI/JSON Schema, command envelopes, and idempotency | Similar developer-experience concerns to M1/M2/M6 RPC and schema work. | Do not duplicate the GS control-plane command API inside GNS.NET. GNS.NET RPCs are connection-scoped gameplay messages and should be adaptable to the GS join-claim contract. |
+| TLS, mTLS/workload identity, rate limits, join-claim validation, audit, OpenTelemetry, load/chaos tests, CI gates, backups, and runbooks | Overlaps the operational acceptance criteria in M5/M6. | GS owns platform/service operations. GNS.NET contributes transport-specific metrics, native-library CI, packet/replay tests, and game-session security evidence. |
+| Server transport, NAT/relay requirements, and regional latency strategy listed as open decisions | Directly overlaps GNS.NET's P2P/signaling/TURN work in M5. | Resolve through an ADR shared by both projects; GNS.NET should expose adapters/contracts, while GS chooses deployment and service ownership. |
+| PostgreSQL outbox, economy, inventory, progression, definitions, agents, and admin workflows | No material overlap with the GNS.NET replication roadmap. | Keep these in GS; GNS.NET should not grow an economy/control-plane subsystem. |
+
+### Result of the validation
+
+The following GNS.NET milestones are genuinely absent from the GS plan and remain valid additions:
+
+- network object identity, spawn/despawn, ownership transfer, observer lifecycle, and gameplay RPCs;
+- field-level replicated-state encoding, quantization, compression, lifecycle deltas, and automatic budgets;
+- tick synchronisation, rollback/resimulation, prediction smoothing, and misprediction telemetry;
+- registered hitbox history, rewind queries, sub-tick lag compensation, and visibility-safe replication;
+- GNS-native lanes/stats, transport acceptance testing, signaling/TURN adapters, and native transport CI;
+- engine-neutral developer tooling for gameplay replication, packet replay, and session-level load tests.
+
+The following should be treated as shared integration requirements rather than new duplicate product
+features: match claims, service identity, external telemetry conventions, regional transport policy,
+and the end-to-end test that allocates a dedicated server before the gameplay client connects.
+
+## Milestone plan
+
+### M1 — Replication runtime foundation
+
+- [ ] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
+- [ ] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration.
+- [ ] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies.
+- [ ] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons.
+- [ ] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join.
+
+Exit criteria: a sample game can create entities, transfer ownership, call an authenticated RPC, reconnect, and rebuild the same object graph without handwritten lifecycle envelopes.
+
+### M2 — Production replication protocol
+
+- [ ] Add schema-generated replicated fields with field masks, dirty tracking, quantization, optional compression, and protocol/schema compatibility negotiation.
+- [ ] Integrate entity create/update/remove records into automatic AOI, delta, priority, batching, and reliable/unreliable channel selection.
+- [ ] Add per-connection byte/message budgets, queue age limits, starvation prevention, and explicit shed/drop counters.
+- [ ] Add shared snapshot encode caches and bounded parallel preparation for connections with identical baselines.
+- [ ] Add property-based/fuzz tests for malformed snapshots, baseline loss, schema mismatch, wraparound, and partial entity sets.
+
+Exit criteria: callers submit authoritative entities/components once; the runtime chooses fields, encodes only relevant changes, emits lifecycle deltas, and reports budget decisions without manual pipeline calls.
+
+### M3 — Tick-synchronised prediction and time
+
+- [ ] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement.
+- [ ] Add client/server tick negotiation and bounded catch-up/slow-down behavior.
+- [ ] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick.
+- [ ] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation.
+- [ ] Add tests under artificial latency, jitter, loss, duplicate snapshots, clock drift, and long rollback windows.
+
+Exit criteria: the sample client predicts immediately, rewinds to an authoritative tick, replays inputs to present, smooths corrections, and exposes prediction cost/misprediction data.
+
+### M4 — Visibility and lag-compensated gameplay
+
+- [ ] Add spatial-hash AOI with composable distance, scene, team, owner-only, custom visibility, and optional occlusion conditions.
+- [ ] Add observer enter/leave events and visibility-safe spawn/despawn ordering.
+- [ ] Add a registered historical hitbox/collider representation with bounded retention and memory budgets.
+- [ ] Add server rewind queries for ray, sphere, and box tests with sub-tick interpolation and maximum rewind policy.
+- [ ] Add security tests proving hidden entities are not serialized and clients cannot select another client’s rewind time.
+
+Exit criteria: a sample shooter can register hitboxes, perform an authoritative rewind query using the shooter’s measured view time, and replicate only valid observers.
+
+### M5 — Transport, P2P, and native operations
+
+- [ ] Expose native GNS connection stats, lanes, send queues, and congestion/backpressure state through stable framework metrics.
+- [ ] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback.
+- [ ] Add LAN, NAT-type, IPv4/IPv6, symmetric-connect, relay, and hostile-network integration tests.
+- [ ] Fix and verify the current native loopback acceptance path; add Windows/Linux native-library CI jobs that run the transport benchmark.
+- [ ] Cache vcpkg/native dependencies and publish native binaries as CI artifacts; never rely on a developer-installed DLL.
+
+Exit criteria: CI produces supported native artifacts, runs authenticated client/server transport tests, and reports throughput, RTT, loss, connection setup, and P2P traversal results.
+
+### M6 — Developer experience and operations
+
+- [ ] Add source generators/analyzers for message IDs, replicated fields, RPC authority, schema versions, and duplicate registrations.
+- [ ] Add generated API/reference docs and templates for server, client, room, entity, and auth-provider adapters.
+- [ ] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay.
+- [ ] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures.
+- [ ] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output.
+- [ ] Add compatibility policy, protocol version negotiation, migration tooling, package signing, and release smoke tests.
+
+Exit criteria: a new developer can scaffold a server/client, define messages and replicated entities, run a deterministic network test, inspect metrics, and reproduce a captured session from CI.
+
+## Recommended order
+
+M1 is the highest-value gap because all later replication features need a common object/room/RPC lifecycle. M2 and M3 follow because current AOI/delta and prediction APIs are powerful primitives but still require game code to compose the full runtime. M4 adds competitive-game correctness, M5 hardens the native/P2P deployment path, and M6 makes the result adoptable and supportable by other developers.
+
+## Reference scope
+
+This is a capability comparison, not a claim that the referenced libraries are interchangeable or that every feature is appropriate for every game. GNS.NET deliberately remains engine-neutral; the milestones therefore target engine-neutral contracts and leave rendering, physics, prefab loading, and game simulation to adapters.
