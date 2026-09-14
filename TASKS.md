@@ -42,10 +42,10 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M3 — Prediction and time
 
-- [ ] M3.1 Integrated predicted world runtime
-  - [ ] Store input/state/simulation metadata per tick.
-  - [ ] Rewind and resimulate a complete sample world.
-  - [ ] Apply correction smoothing to rendered state.
+- [x] M3.1 Integrated predicted world runtime
+  - [x] Store input/state/simulation metadata per tick.
+  - [x] Rewind and resimulate a complete sample world.
+  - [x] Apply correction smoothing to rendered state.
 - [ ] M3.2 Clock/tick policy integration
   - [x] Apply measured drift to synchronization policy.
   - [x] Integrate bounded catch-up/slow-down into TickLoop.

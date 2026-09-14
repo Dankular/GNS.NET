@@ -78,6 +78,31 @@ public sealed class RollbackBuffer<TInput, TState>
 
 public readonly record struct RollbackResult<TState>(TState State, bool Corrected, int ResimulatedTicks);
 
+/// <summary>Composes prediction history, authoritative reconciliation, and render correction for one world.</summary>
+public sealed class PredictedWorldRuntime<TInput, TState>
+{
+    private readonly Func<TState, TInput, TState> simulate;
+    private readonly Func<TState, TState, float, TState> interpolate;
+    private readonly RollbackBuffer<TInput, TState> history;
+    private TState authoritativeState;
+    public TState PredictedState { get; private set; }
+    public TState RenderedState { get; private set; }
+    public RollbackResult<TState> LastReconciliation { get; private set; }
+    public PredictedWorldRuntime(TState initialState, Func<TState, TInput, TState> simulate, Func<TState, TState, float, TState> interpolate, int historyCapacity = 256, int maxResimulationTicks = 128)
+    {
+        this.authoritativeState = this.PredictedState = this.RenderedState = initialState;
+        this.simulate = simulate ?? throw new ArgumentNullException(nameof(simulate)); this.interpolate = interpolate ?? throw new ArgumentNullException(nameof(interpolate));
+        this.history = new RollbackBuffer<TInput, TState>(historyCapacity, maxResimulationTicks);
+    }
+    public void Predict(uint tick, TInput input) { this.PredictedState = this.simulate(this.PredictedState, input); this.history.Record(tick, input, this.PredictedState); this.RenderedState = this.PredictedState; }
+    public RollbackResult<TState> Reconcile(uint authoritativeTick, TState authoritativeState, int smoothingFrames = 6)
+    {
+        this.authoritativeState = authoritativeState; this.LastReconciliation = this.history.ReconcileDetailed(authoritativeTick, authoritativeState, this.simulate); this.PredictedState = this.LastReconciliation.State;
+        this.RenderedState = this.interpolate(this.RenderedState, this.PredictedState, smoothingFrames < 1 ? 1f : 1f / smoothingFrames); return this.LastReconciliation;
+    }
+    public TState StepRenderedCorrection() { this.RenderedState = this.interpolate(this.RenderedState, this.PredictedState, 0.25f); return this.RenderedState; }
+}
+
 /// <summary>Applies authoritative scalar corrections over a bounded render duration.</summary>
 public sealed class CorrectionSmoother
 {

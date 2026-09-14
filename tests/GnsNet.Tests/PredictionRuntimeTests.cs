@@ -73,6 +73,15 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void PredictedWorldRuntime_PredictsReconcilesAndSmoothsRenderedState()
+    {
+        var runtime = new PredictedWorldRuntime<int, float>(0, (state, input) => state + input, (from, to, amount) => from + (to - from) * amount);
+        runtime.Predict(1, 2); runtime.Predict(2, 2); RollbackResult<float> correction = runtime.Reconcile(1, 1, 4);
+        Assert.True(correction.Corrected); Assert.Equal(3, runtime.PredictedState); Assert.Equal(3.75f, runtime.RenderedState, 3); Assert.Equal(1, correction.ResimulatedTicks);
+        Assert.True(runtime.StepRenderedCorrection() < 3.75f);
+    }
+
+    [Fact]
     public void DirtyMaskQuantizationAndExtrapolationAreDeterministic()
     {
         var mask = new DirtyFieldMask(65); mask.Set(64); Assert.True(mask.IsSet(64)); mask.Clear(); Assert.False(mask.IsSet(64));
