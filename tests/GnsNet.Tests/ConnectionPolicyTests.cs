@@ -164,7 +164,7 @@ public sealed class ConnectionPolicyTests
     {
         var tokenService = new ConnectTokenService(new byte[32]);
         var admission = new ConnectionAdmission(tokenService);
-        string token = tokenService.Issue("player", TimeSpan.FromMinutes(1), DateTimeOffset.UnixEpoch);
+        string token = tokenService.Issue("player", TimeSpan.FromMinutes(1));
         Assert.True(admission.TryAdmit(token, out ConnectClaims claims));
 
         var sessions = new ServerSessionRegistry<string>(TimeSpan.FromMinutes(1));
