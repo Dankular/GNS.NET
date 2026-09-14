@@ -6,12 +6,12 @@ means a supported partial implementation or an external validation dependency; `
 
 ## M1 — Replication lifecycle
 
-- [~] M1.1 Automatic reconnect object-graph rehydration
+- [x] M1.1 Automatic reconnect object-graph rehydration
   - [x] Persist bounded authoritative lifecycle history per session.
   - [x] Replay spawn, ownership, and despawn records after resumption.
   - [x] Verify ordering and duplicate suppression during replay.
   - [x] Automatically feed registered host/registry lifecycle events into the session journal.
-  - [ ] Send a complete initial object graph when the journal retention window is exceeded.
+  - [x] Send a complete initial object graph when the journal retention window is exceeded.
 - [~] M1.2 Complete command/RPC framework
   - [x] Add typed MemoryPack command contracts.
   - [ ] Add targeted client routing.
