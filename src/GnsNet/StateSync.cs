@@ -2,20 +2,26 @@ namespace GnsNet;
 
 public sealed class ClientPrediction<TInput, TState>
 {
-    private readonly Dictionary<uint, TInput> pending = new();
+    private readonly Dictionary<uint, (TInput Input, PredictionTickMetadata Metadata)> pending = new();
     public int PendingCount => this.pending.Count;
     public int LastResimulatedTicks { get; private set; }
     public bool LastCorrected { get; private set; }
-    public void Add(uint tick, TInput input) => this.pending[tick] = input;
+    public IReadOnlyList<PredictionTickMetadata> LastReplayedMetadata { get; private set; } = Array.Empty<PredictionTickMetadata>();
+    public void Add(uint tick, TInput input) => this.Add(tick, input, PredictionTickMetadata.Default);
+    public void Add(uint tick, TInput input, PredictionTickMetadata metadata) => this.pending[tick] = (input, metadata);
     public TState Reconcile(uint acknowledgedTick, TState authoritative, Func<TState, TInput, TState> simulate)
     {
-        TState state = authoritative; int replayed = 0;
-        foreach ((uint tick, TInput input) in this.pending.Where(x => TickSequence.IsNewer(acknowledgedTick, x.Key)).OrderBy(x => unchecked(x.Key - acknowledgedTick)).ToArray())
+        return this.Reconcile(acknowledgedTick, authoritative, (state, input, _) => simulate(state, input));
+    }
+    public TState Reconcile(uint acknowledgedTick, TState authoritative, Func<TState, TInput, PredictionTickMetadata, TState> simulate)
+    {
+        TState state = authoritative; int replayed = 0; var metadata = new List<PredictionTickMetadata>();
+        foreach ((uint tick, (TInput Input, PredictionTickMetadata Metadata) value) in this.pending.Where(x => TickSequence.IsNewer(acknowledgedTick, x.Key)).OrderBy(x => unchecked(x.Key - acknowledgedTick)).ToArray())
         {
-            state = simulate(state, input); replayed++;
+            state = simulate(state, value.Input, value.Metadata); metadata.Add(value.Metadata); replayed++;
         }
         foreach (uint tick in this.pending.Keys.Where(tick => !TickSequence.IsNewer(acknowledgedTick, tick)).ToArray()) this.pending.Remove(tick);
-        this.LastResimulatedTicks = replayed; this.LastCorrected = replayed != 0; return state;
+        this.LastReplayedMetadata = metadata; this.LastResimulatedTicks = replayed; this.LastCorrected = replayed != 0; return state;
     }
 }
 

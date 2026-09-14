@@ -29,9 +29,9 @@ public sealed class PredictionRuntimeTests
         var replayMetadata = new PredictionTickMetadata(TimeSpan.FromMilliseconds(20), 99, 8);
         client.SubmitInput(13, new TestState { Value = 5 }, replayMetadata);
         host.Router.Dispatch(new NetFrame(options.StateOpcode, 12, NetSerializer.Serialize(new TestState { Value = 3 })));
-        Assert.Equal(4d, client.LastMispredictionMagnitude);
+        Assert.Equal(2d, client.LastMispredictionMagnitude);
         Assert.Equal(1, client.MispredictionCount);
-        Assert.Equal(4d, client.TotalMispredictionMagnitude);
+        Assert.Equal(2d, client.TotalMispredictionMagnitude);
         Assert.Equal(new[] { replayMetadata }, client.LastReplayedMetadata);
         await host.DisposeAsync();
     }
@@ -148,9 +148,11 @@ public sealed class PredictionRuntimeTests
     [Fact]
     public void PredictedWorldRuntime_PredictsReconcilesAndSmoothsRenderedState()
     {
-        var runtime = new PredictedWorldRuntime<int, float>(0, (state, input) => state + input, (from, to, amount) => from + (to - from) * amount);
+        var metadata = new PredictionTickMetadata(TimeSpan.FromMilliseconds(16), 123, 4);
+        var runtime = new PredictedWorldRuntime<int, float>(0, (state, input) => state + input, (from, to, amount) => from + (to - from) * amount, predictionMetadata: metadata);
         runtime.Predict(1, 2); runtime.Predict(2, 2); RollbackResult<float> correction = runtime.Reconcile(1, 1, 4);
         Assert.True(correction.Corrected); Assert.Equal(3, runtime.PredictedState); Assert.Equal(3.75f, runtime.RenderedState, 3); Assert.Equal(1, correction.ResimulatedTicks);
+        Assert.Equal(metadata, runtime.PredictionMetadata); Assert.Equal(new[] { metadata }, runtime.LastReplayedMetadata);
         Assert.True(runtime.StepRenderedCorrection() < 3.75f);
     }
 

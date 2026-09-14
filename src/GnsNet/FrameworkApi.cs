@@ -12,6 +12,9 @@ public sealed class NetworkFrameworkOptions
     public uint InterpolationDelayTicks { get; init; } = 2;
     public int ServerTickRateHz { get; init; } = 60;
     public int MaxPredictionCatchUpTicks { get; init; } = 4;
+    public TimeSpan PredictionTimestep { get; init; } = TimeSpan.FromSeconds(1d / 60d);
+    public ulong DeterministicSeed { get; init; }
+    public uint WorldVersion { get; init; }
     public void Validate()
     {
         if (InputOpcode is 0 or 0xFC or 0xFD or 0xFE || StateOpcode is 0 or 0xFC or 0xFD or 0xFE)
@@ -20,6 +23,7 @@ public sealed class NetworkFrameworkOptions
         if (SnapshotBufferCapacity < 2) throw new ArgumentOutOfRangeException(nameof(SnapshotBufferCapacity));
         if (ServerTickRateHz is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(ServerTickRateHz));
         if (MaxPredictionCatchUpTicks < 1) throw new ArgumentOutOfRangeException(nameof(MaxPredictionCatchUpTicks));
+        if (PredictionTimestep <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(PredictionTimestep));
     }
 }
 
@@ -82,6 +86,8 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
     public TickRateCoordinator TickCoordinator { get; }
     public uint ServerTick => this.TickCoordinator.ServerTick;
     public TimeSpan TickDuration => this.TickCoordinator.TickDuration;
+    public PredictionTickMetadata PredictionMetadata => new(this.options.PredictionTimestep, this.options.DeterministicSeed, this.options.WorldVersion);
+    public IReadOnlyList<PredictionTickMetadata> LastReplayedMetadata => this.Prediction.LastReplayedMetadata;
     public event Action<TState>? StateReconciled;
 
     public GnsPredictedClient(GnsClientHost host, TState initialState, Func<TState, TInput, TState> simulate,
@@ -111,9 +117,12 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
     public int TicksToSimulate(uint localTick) => this.TickCoordinator.TicksToSimulate(localTick);
 
     public bool SubmitInput(uint tick, TInput input)
+        => this.SubmitInput(tick, input, this.PredictionMetadata);
+
+    public bool SubmitInput(uint tick, TInput input, PredictionTickMetadata metadata)
     {
         this.PredictedState = this.simulate(this.PredictedState, input);
-        this.Prediction.Add(tick, input);
+        this.Prediction.Add(tick, input, metadata);
         return this.Host.Send(this.options.InputOpcode, tick, input, NetChannel.State.SendType());
     }
 
@@ -129,7 +138,7 @@ public sealed class GnsPredictedClient<TInput, TState> where TInput : IMemoryPac
             this.TotalMispredictionMagnitude += this.LastMispredictionMagnitude;
         }
         this.AuthoritativeState = state;
-        this.PredictedState = this.Prediction.Reconcile(tick, state, this.simulate);
+        this.PredictedState = this.Prediction.Reconcile(tick, state, (predicted, input, _) => this.simulate(predicted, input));
         this.Snapshots.Add(tick, this.PredictedState);
         this.StateReconciled?.Invoke(this.PredictedState);
     }

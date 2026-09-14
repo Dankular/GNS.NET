@@ -75,7 +75,7 @@ Exit criteria: callers submit authoritative entities/components once; the runtim
 
 - [~] Add heartbeat-based server clock offset, drift, jitter, and tick-rate measurement; measured heartbeat timing and drift-adjusted pacing exist, while native heartbeat sequence/loss integration remains an external transport concern.
 - [x] Add client/server tick negotiation and bounded catch-up/slow-down behavior; facade and coordinated tick loop are integrated and tested.
-- [~] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick; integrated rollback exists, but explicit timestep/seed/world-version metadata remains.
+- [x] Replace the helper-only prediction path with a rollback buffer containing input, state, and simulation metadata per tick; timestep, deterministic seed, and world version are retained and replay-visible.
 - [x] Add deterministic resimulation limits, misprediction magnitude/count metrics, correction smoothing, and controlled extrapolation; covered by facade and wraparound tests.
 - [x] Add tests under artificial latency, jitter, loss, duplicate snapshots, clock drift, and long rollback windows.
 

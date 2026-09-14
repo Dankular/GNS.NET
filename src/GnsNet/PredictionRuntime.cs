@@ -1,5 +1,11 @@
 namespace GnsNet;
 
+/// <summary>Deterministic inputs required to replay one prediction tick.</summary>
+public readonly record struct PredictionTickMetadata(TimeSpan Timestep, ulong DeterministicSeed, uint WorldVersion)
+{
+    public static PredictionTickMetadata Default => new(TimeSpan.FromSeconds(1d / 60d), 0, 0);
+}
+
 /// <summary>Tracks server clock offset and jitter using NTP-style four-timestamp samples.</summary>
 public sealed class NetworkClockSynchronizer
 {
@@ -51,27 +57,34 @@ public sealed class RollbackBuffer<TInput, TState>
 {
     private readonly int capacity;
     private readonly int maxResimulationTicks;
-    private readonly SortedDictionary<uint, (TInput Input, TState State)> entries = new();
+    private readonly SortedDictionary<uint, (TInput Input, TState State, PredictionTickMetadata Metadata)> entries = new();
     public RollbackBuffer(int capacity = 256, int maxResimulationTicks = 128) { if (capacity < 2) throw new ArgumentOutOfRangeException(nameof(capacity)); if (maxResimulationTicks < 1) throw new ArgumentOutOfRangeException(nameof(maxResimulationTicks)); this.capacity = capacity; this.maxResimulationTicks = maxResimulationTicks; }
     public int Count => this.entries.Count;
     public long CorrectionCount { get; private set; }
     public long ResimulatedTickCount { get; private set; }
-    public void Record(uint tick, TInput input, TState predictedState)
+    public IReadOnlyList<PredictionTickMetadata> LastReplayedMetadata { get; private set; } = Array.Empty<PredictionTickMetadata>();
+    public void Record(uint tick, TInput input, TState predictedState) => this.Record(tick, input, predictedState, PredictionTickMetadata.Default);
+    public void Record(uint tick, TInput input, TState predictedState, PredictionTickMetadata metadata)
     {
-        this.entries[tick] = (input, predictedState);
+        this.entries[tick] = (input, predictedState, metadata);
         while (this.entries.Count > this.capacity) this.entries.Remove(this.entries.Keys.First());
     }
     public TState Reconcile(uint authoritativeTick, TState authoritativeState, Func<TState, TInput, TState> simulate)
     {
         return this.ReconcileDetailed(authoritativeTick, authoritativeState, simulate).State;
     }
-    public RollbackResult<TState> ReconcileDetailed(uint authoritativeTick, TState authoritativeState, Func<TState, TInput, TState> simulate)
+    public RollbackResult<TState> ReconcileDetailed(uint authoritativeTick, TState authoritativeState,
+        Func<TState, TInput, TState> simulate) => this.ReconcileDetailed(authoritativeTick, authoritativeState,
+        (state, input, _) => simulate(state, input));
+    public RollbackResult<TState> ReconcileDetailed(uint authoritativeTick, TState authoritativeState,
+        Func<TState, TInput, PredictionTickMetadata, TState> simulate)
     {
-        ArgumentNullException.ThrowIfNull(simulate); TState state = authoritativeState; int replayed = 0;
-        foreach ((uint tick, (TInput Input, TState State) value) in this.entries.Where(x => TickSequence.IsNewer(authoritativeTick, x.Key)).OrderBy(x => unchecked(x.Key - authoritativeTick)))
-        { if (replayed++ >= this.maxResimulationTicks) throw new InvalidOperationException("Rollback exceeds the configured resimulation budget."); state = simulate(state, value.Input); }
+        ArgumentNullException.ThrowIfNull(simulate); TState state = authoritativeState; int replayed = 0; var replayMetadata = new List<PredictionTickMetadata>();
+        foreach ((uint tick, (TInput Input, TState State, PredictionTickMetadata Metadata) value) in this.entries.Where(x => TickSequence.IsNewer(authoritativeTick, x.Key)).OrderBy(x => unchecked(x.Key - authoritativeTick)))
+        { if (replayed++ >= this.maxResimulationTicks) throw new InvalidOperationException("Rollback exceeds the configured resimulation budget."); state = simulate(state, value.Input, value.Metadata); replayMetadata.Add(value.Metadata); }
         if (replayed != 0) this.CorrectionCount++; this.ResimulatedTickCount += replayed;
         foreach (uint tick in this.entries.Keys.Where(x => !TickSequence.IsNewer(authoritativeTick, x)).ToArray()) this.entries.Remove(tick);
+        this.LastReplayedMetadata = replayMetadata;
         return new RollbackResult<TState>(state, replayed != 0, replayed);
     }
 }
@@ -88,13 +101,17 @@ public sealed class PredictedWorldRuntime<TInput, TState>
     public TState PredictedState { get; private set; }
     public TState RenderedState { get; private set; }
     public RollbackResult<TState> LastReconciliation { get; private set; }
-    public PredictedWorldRuntime(TState initialState, Func<TState, TInput, TState> simulate, Func<TState, TState, float, TState> interpolate, int historyCapacity = 256, int maxResimulationTicks = 128)
+    public PredictionTickMetadata PredictionMetadata { get; }
+    public IReadOnlyList<PredictionTickMetadata> LastReplayedMetadata => this.history.LastReplayedMetadata;
+    public PredictedWorldRuntime(TState initialState, Func<TState, TInput, TState> simulate, Func<TState, TState, float, TState> interpolate, int historyCapacity = 256, int maxResimulationTicks = 128, PredictionTickMetadata? predictionMetadata = null)
     {
         this.authoritativeState = this.PredictedState = this.RenderedState = initialState;
         this.simulate = simulate ?? throw new ArgumentNullException(nameof(simulate)); this.interpolate = interpolate ?? throw new ArgumentNullException(nameof(interpolate));
         this.history = new RollbackBuffer<TInput, TState>(historyCapacity, maxResimulationTicks);
+        this.PredictionMetadata = predictionMetadata ?? PredictionTickMetadata.Default;
     }
-    public void Predict(uint tick, TInput input) { this.PredictedState = this.simulate(this.PredictedState, input); this.history.Record(tick, input, this.PredictedState); this.RenderedState = this.PredictedState; }
+    public void Predict(uint tick, TInput input) => this.Predict(tick, input, this.PredictionMetadata);
+    public void Predict(uint tick, TInput input, PredictionTickMetadata metadata) { this.PredictedState = this.simulate(this.PredictedState, input); this.history.Record(tick, input, this.PredictedState, metadata); this.RenderedState = this.PredictedState; }
     public RollbackResult<TState> Reconcile(uint authoritativeTick, TState authoritativeState, int smoothingFrames = 6)
     {
         this.authoritativeState = authoritativeState; this.LastReconciliation = this.history.ReconcileDetailed(authoritativeTick, authoritativeState, this.simulate); this.PredictedState = this.LastReconciliation.State;
