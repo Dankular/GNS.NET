@@ -1,6 +1,7 @@
 namespace GnsNet;
 
 using System.Diagnostics;
+using System.Text.Json;
 
 public interface IShardProcessController<TShardId>
 {
@@ -71,8 +72,16 @@ public sealed class LocalShardProcessController<TShardId> : IShardProcessControl
     private readonly Func<TShardId, string> arguments;
     private readonly Dictionary<TShardId, Process> processes = new();
     public LocalShardProcessController(string executable, Func<TShardId, string>? arguments = null) { this.executable = executable; this.arguments = arguments ?? (_ => string.Empty); }
-    public Task StartAsync(TShardId shard, CancellationToken cancellationToken = default) { if (this.processes.TryGetValue(shard, out Process? existing)) { if (!existing.HasExited) return Task.CompletedTask; this.processes.Remove(shard); existing.Dispose(); } Process process = Process.Start(new ProcessStartInfo(this.executable, this.arguments(shard)) { UseShellExecute = false, CreateNoWindow = true }) ?? throw new InvalidOperationException("Unable to start shard process."); this.processes[shard] = process; return Task.CompletedTask; }
-    public Task MigrateAsync<TPlayerId>(TPlayerId player, TShardId source, TShardId target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task StartAsync(TShardId shard, CancellationToken cancellationToken = default) { if (this.processes.TryGetValue(shard, out Process? existing)) { if (!existing.HasExited) return Task.CompletedTask; this.processes.Remove(shard); existing.Dispose(); } Process process = Process.Start(new ProcessStartInfo(this.executable, this.arguments(shard)) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true }) ?? throw new InvalidOperationException("Unable to start shard process."); this.processes[shard] = process; return Task.CompletedTask; }
+    /// <summary>Sends an explicit migration command to both live shard processes over their control stdin.</summary>
+    public async Task MigrateAsync<TPlayerId>(TPlayerId player, TShardId source, TShardId target, CancellationToken cancellationToken = default)
+    {
+        if (!this.processes.TryGetValue(source, out Process? sourceProcess) || sourceProcess.HasExited) throw new InvalidOperationException("Source shard process is not running.");
+        if (!this.processes.TryGetValue(target, out Process? targetProcess) || targetProcess.HasExited) throw new InvalidOperationException("Target shard process is not running.");
+        string command = JsonSerializer.Serialize(new { type = "player.migrate", player, source, target }) + Environment.NewLine;
+        await sourceProcess.StandardInput.WriteAsync(command.AsMemory(), cancellationToken).ConfigureAwait(false); await sourceProcess.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await targetProcess.StandardInput.WriteAsync(command.AsMemory(), cancellationToken).ConfigureAwait(false); await targetProcess.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
     public TimeSpan ShutdownGracePeriod { get; init; } = TimeSpan.FromSeconds(5);
     public bool IsRunning(TShardId shard) => this.processes.TryGetValue(shard, out Process? process) && !process.HasExited;
     public async Task StopAsync(TShardId shard, CancellationToken cancellationToken = default)
