@@ -326,7 +326,12 @@ jobs:
         test -f "$(find native-artifacts/windows -type f -name 'gns-artifact.sha256' -print -quit)"
         file "$linux_artifact" | grep -E 'ELF 64-bit.*x86-64'
         file "$windows_artifact" | grep -E 'PE32\+.*x86-64|PE32\+ executable.*AMD64'
-        (cd native-artifacts/linux && sha256sum --check "$(find . -name gns-artifact.sha256 -print -quit)")
-        (cd native-artifacts/windows && sha256sum --check "$(find . -name gns-artifact.sha256 -print -quit)")
+        linux_manifest="$(find native-artifacts/linux -type f -name gns-artifact.sha256 -print -quit)"
+        windows_manifest="$(find native-artifacts/windows -type f -name gns-artifact.sha256 -print -quit)"
+        linux_expected="$(awk '{print $1}' "$linux_manifest")"
+        windows_expected="$(awk '{print $1}' "$windows_manifest")"
+        test -n "$linux_expected" && test -n "$windows_expected"
+        test "$(sha256sum "$linux_artifact" | awk '{print $1}')" = "$linux_expected"
+        test "$(sha256sum "$windows_artifact" | awk '{print $1}')" = "$windows_expected"
         test "$(find native-artifacts/windows -type f -name '*.dll' | wc -l)" -ge 1
         echo "Native Linux and Windows artifacts passed identity and architecture validation."
