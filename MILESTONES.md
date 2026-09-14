@@ -54,7 +54,7 @@ and the end-to-end test that allocates a dedicated server before the gameplay cl
 ### M1 — Replication runtime foundation
 
 - [x] Define stable `NetworkObjectId`, prefab/type ID, owner, spawn tick, and despawn reason envelopes.
-- [~] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; automatic transport rehydration remains.
+- [~] Add server-owned spawn/despawn/ownership transfer with idempotent client application and reconnect rehydration; registered lifecycle journals now replay automatically on resumed attach, but full-graph fallback after journal retention remains.
 - [~] Add registered commands, server RPCs, client RPCs, targeted RPCs, response correlation, timeout, and per-endpoint authority policies; authority, generated registration, correlation, and cancellation exist, but command classes and client-target routing remain.
 - [~] Add a room/session lifecycle: `Lobby`, `Ready`, `Starting`, `InGame`, `Draining`, `Ended`; support max players, lock-after-start, late join, and leave reasons. Scene transition messages remain.
 - [~] Add integration tests for duplicate/reordered lifecycle messages, reconnect during spawn, unauthorized RPCs, and late join; current tests cover core idempotency/authority/late join, not the full reconnect integration.

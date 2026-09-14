@@ -8,6 +8,7 @@ public sealed class ServerSessionRegistry<TId> where TId : notnull
     public ServerSessionRegistry(TimeSpan gracePeriod) => this.grace = new SessionGraceTracker<TId>(gracePeriod);
     public SessionRehydrationBuffer<TId> Rehydration { get; } = new();
     public IReadOnlyDictionary<TId, GnsConnection> Active { get { lock (this.sync) return new Dictionary<TId, GnsConnection>(this.active); } }
+    public IReadOnlyCollection<TId> KnownSessions { get { lock (this.sync) return this.active.Keys.Concat(this.grace.Tracked).Distinct().ToArray(); } }
     public bool Attach(TId id, GnsConnection connection, DateTimeOffset? now = null)
     {
         // The return value reports resumption, not admission success.

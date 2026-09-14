@@ -27,4 +27,5 @@ public sealed class SessionGraceTracker<TId> where TId : notnull
         lock (this.sync) foreach (var pair in this.disconnected.Where(x => x.Value < timestamp).ToArray()) this.disconnected.Remove(pair.Key);
     }
     public bool Contains(TId id) { lock (this.sync) return this.disconnected.ContainsKey(id); }
+    public IReadOnlyCollection<TId> Tracked { get { lock (this.sync) return this.disconnected.Keys.ToArray(); } }
 }

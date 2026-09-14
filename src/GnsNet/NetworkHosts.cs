@@ -23,6 +23,9 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
     private readonly Dictionary<byte, Action<TSessionId, NetFrame>> snapshotAcknowledgers = new();
     private readonly Dictionary<uint, HeartbeatTracker> heartbeatTrackers = new();
     private readonly Dictionary<uint, DateTimeOffset> heartbeatSentAt = new();
+    private NetworkObjectRegistry<TSessionId>? lifecycleRegistry;
+    private byte lifecycleOpcode;
+    private Func<NetworkObjectChange, byte[]>? lifecycleEncoder;
     public LoadSheddingPolicy? LoadShedding { get; init; }
     public Func<ServerLoad>? LoadProvider { get; init; }
     /// <summary>Requires a signed application admission token before gameplay frames are dispatched.</summary>
@@ -67,8 +70,26 @@ public sealed class GnsServerHost<TSessionId> where TSessionId : notnull
         this.connectionSessions[connection.Handle.Handle] = id;
         // Attach returns whether the session resumed grace state; admission itself succeeds for
         // both a first connection and a valid resumption.
-        this.Sessions.Attach(id, connection);
+        bool resumed = this.Sessions.Attach(id, connection);
+        if (resumed && this.lifecycleEncoder is not null) this.SendRehydration(id, connection, this.lifecycleOpcode, this.lifecycleEncoder, 0);
         return true;
+    }
+    /// <summary>Automatically journals lifecycle changes and replays them on a grace-period resumption.</summary>
+    public void RegisterLifecycleRehydration(NetworkObjectRegistry<TSessionId> registry, byte opcode, Func<NetworkObjectChange, byte[]> encoder)
+    {
+        ArgumentNullException.ThrowIfNull(registry); ArgumentNullException.ThrowIfNull(encoder);
+        if (this.lifecycleRegistry is not null) throw new InvalidOperationException("Lifecycle rehydration is already registered.");
+        this.lifecycleRegistry = registry; this.lifecycleOpcode = opcode; this.lifecycleEncoder = encoder;
+        registry.Changed += change => { foreach (TSessionId session in this.Sessions.KnownSessions) this.Sessions.Rehydration.Record(session, change); };
+    }
+    public int SendRehydration(TSessionId session, byte opcode, Func<NetworkObjectChange, byte[]> encoder, uint tick = 0)
+    {
+        if (!this.Sessions.TryGet(session, out GnsConnection? connection) || connection is null) return 0;
+        return this.SendRehydration(session, connection, opcode, encoder, tick);
+    }
+    private int SendRehydration(TSessionId session, GnsConnection connection, byte opcode, Func<NetworkObjectChange, byte[]> encoder, uint tick)
+    {
+        int sent = 0; foreach (NetworkObjectChange change in this.Sessions.Rehydration.Snapshot(session)) if (this.server.Send(connection, new NetFrame(opcode, tick, encoder(change)).Encode(), ESteamNetworkingSendType.Reliable) == EResult.OK) sent++; return sent;
     }
     public bool Admit(GnsConnection connection, string token)
     {

@@ -151,6 +151,13 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public void SessionGraceTracker_ExposesGraceTrackedSessionsForLifecycleJournaling()
+    {
+        var tracker = new SessionGraceTracker<string>(TimeSpan.FromMinutes(1)); tracker.MarkDisconnected("s", DateTimeOffset.UtcNow);
+        Assert.Contains("s", tracker.Tracked);
+    }
+
+    [Fact]
     public void Heartbeat_SeparatesGameTimeoutFromTransport()
     {
         var monitor = new HeartbeatMonitor<string>(TimeSpan.FromSeconds(5));

@@ -10,7 +10,8 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Persist bounded authoritative lifecycle history per session.
   - [x] Replay spawn, ownership, and despawn records after resumption.
   - [x] Verify ordering and duplicate suppression during replay.
-  - [ ] Automatically feed every host/registry lifecycle event into the session journal.
+  - [x] Automatically feed registered host/registry lifecycle events into the session journal.
+  - [ ] Send a complete initial object graph when the journal retention window is exceeded.
 - [~] M1.2 Complete command/RPC framework
   - [ ] Add typed command contracts.
   - [ ] Add targeted client routing.
