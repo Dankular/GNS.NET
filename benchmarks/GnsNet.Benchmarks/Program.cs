@@ -48,7 +48,7 @@ static void RunSaturation(BenchmarkOptions options)
     var points = new List<SaturationPoint>();
     foreach (int burst in new[] { 1, 2, 4, 8, 16, 32 })
     {
-        TransportResult result = BenchmarkTransport(options with { Iterations = Math.Min(options.Iterations, 500) }, burst);
+        TransportResult result = BenchmarkTransport(options with { Iterations = Math.Min(options.Iterations, 500), NativePath = options.NativePath ?? "/opt/gns/lib/libGameNetworkingSockets.so" }, burst);
         long offered = (long)options.Clients * burst * Math.Max(1, options.PayloadBytes);
         points.Add(new(burst, result.Messages, result.Messages / result.Elapsed.TotalSeconds, result.Loss, result.P50.TotalMilliseconds, result.P99.TotalMilliseconds, offered));
         Console.WriteLine($"Saturation burst={burst}: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} msg/s | offered={offered / 1024d:N1} KiB/tick | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | loss={result.Loss:P2}");
