@@ -96,7 +96,7 @@ Exit criteria: a sample shooter can register hitboxes, perform an authoritative 
 - [x] Expose native GNS connection stats, lanes, send queues, and congestion/backpressure state through stable framework metrics.
 - [~] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback; the authenticated adapter/contract exists, but native traversal remains unverified.
 - [ ] Add LAN, NAT-type, IPv4/IPv6, symmetric-connect, relay, and hostile-network integration tests.
-- [~] Fix and verify the current native loopback acceptance path; the Linux Docker harness now builds the native runtime and has been verified on the configured VPS (2,000/2,000 echoed, 0% loss, RTT p50 2.31 ms, p99 2.77 ms), but Windows/native traversal remain.
+- [~] Fix and verify the current native loopback acceptance path; the Linux Docker harness now builds the native runtime and has been verified on the configured VPS, and CI requires an explicit `--insecure` loopback switch with managed auth capability evidence, but Windows/native traversal remain.
 - [~] Cache vcpkg/native dependencies and publish native binaries as CI artifacts; jobs now validate x64 format and SHA-256 identity before and after transfer, but hosted CI publication has not yet executed.
 
 Exit criteria: CI produces supported native artifacts, runs authenticated client/server transport tests, and reports throughput, RTT, loss, connection setup, and P2P traversal results.

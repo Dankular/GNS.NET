@@ -35,3 +35,10 @@ Manual runs can pin the GameNetworkingSockets source with the `gns_ref` workflow
 push and pull-request runs use `master`; production consumers should use a reviewed commit or tag.
 This validates packaging and runtime artifact identity, but it does not claim Windows execution on
 Linux or native NAT/TURN traversal. Those require platform runners and public-network peers.
+
+The native loopback benchmark also requires `--insecure` explicitly. CI verifies that omitting this
+switch fails, then runs the managed connection-admission and external-authentication contract tests
+and publishes `native-auth-capability.json`. This is the safest in-repository authentication coverage:
+it proves that insecure mode cannot be accidental and that application admission/auth contracts pass
+without embedding credentials. It does not validate Steamworks tickets, native GNS certificates, or
+real client/server authentication over a public network.

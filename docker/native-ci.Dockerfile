@@ -19,4 +19,4 @@ ENV LD_LIBRARY_PATH=/opt/gns/lib
 RUN dotnet restore GnsNet.sln
 RUN dotnet build GnsNet.sln -c Release --no-restore
 RUN dotnet test GnsNet.sln -c Release --no-build --verbosity normal
-ENTRYPOINT ["dotnet", "run", "--project", "benchmarks/GnsNet.Benchmarks", "-c", "Release", "--no-build", "--", "--scenario", "transport", "--native-path", "/opt/gns/lib/libGameNetworkingSockets.so", "--clients", "2", "--iterations", "1000", "--payload-bytes", "64"]
+ENTRYPOINT ["dotnet", "run", "--project", "benchmarks/GnsNet.Benchmarks", "-c", "Release", "--no-build", "--", "--scenario", "transport", "--insecure", "--native-path", "/opt/gns/lib/libGameNetworkingSockets.so", "--clients", "2", "--iterations", "1000", "--payload-bytes", "64"]
