@@ -1,5 +1,8 @@
 # GNS.NET execution checklist
 
+> Canonical status has moved to [`PROJECT_STATUS.md`](PROJECT_STATUS.md). This file is retained as
+> a compatibility entry point; update the consolidated checklist there, not here.
+
 This is the execution checklist requested for the milestone gap closure. It is not a replacement for
 implementation: an item may be marked `[x]` only after integration, tests, and verification. `[~]`
 means a supported partial implementation or an external validation dependency; `[ ]` means work remains.

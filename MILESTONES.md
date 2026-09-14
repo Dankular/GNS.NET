@@ -1,5 +1,9 @@
 # GNS.NET milestones and gap analysis
 
+> Canonical milestone status and the consolidated execution plan are maintained in
+> [`PROJECT_STATUS.md`](PROJECT_STATUS.md). The detailed roadmap below is retained for historical
+> context; update the canonical document rather than maintaining competing status claims.
+
 This roadmap compares GNS.NET with production networking stacks and turns the gaps into testable milestones. Statuses below are audited against the current repository: `[x]` means implemented, integrated, tested, and verified; `[~]` means a supported partial implementation or an external validation dependency; `[ ]` means genuinely incomplete. The plan is intentionally engine-neutral and does not treat interfaces or scaffolding as finished features.
 
 Current audit: the M1-M6 foundation is implemented in substantial pieces, but no milestone exit criterion is yet fully satisfied. The remaining gaps are called out explicitly below.

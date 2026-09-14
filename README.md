@@ -13,9 +13,10 @@ both protocol and MemoryPack schema revisions and reject unsupported revisions b
 
 The managed framework is suitable for beginning game integration. It is not a claim that this
 repository alone is production-ready for public-Internet deployment: real two-peer NAT traversal,
-Coturn/VPS operation, Steamworks ticket callbacks, authenticated native CI, public-network matrix
-testing, and the release-operation items listed in [MILESTONES.md](MILESTONES.md) still require
-external systems or platform credentials.
+Steamworks ticket callbacks, certificate-provisioned authenticated native CI, public-network matrix
+testing, and the release-operation items listed in [PROJECT_STATUS.md](PROJECT_STATUS.md) still
+require external systems or platform credentials. The GS-managed Coturn deployment has been
+validated on the build VPS; the missing proof is the two-peer path through it.
 
 ## Companion GameService
 
@@ -157,7 +158,7 @@ actual GS HTTP boundary and claim-validation responsibilities, see
 [`docs/gameservice-integration.md`](docs/gameservice-integration.md).
 
 The audited capability roadmap and comparison against Unity Netcode, Photon Fusion, FishNet,
-Mirror, Unreal Iris, Godot, and Valve GNS is in [MILESTONES.md](MILESTONES.md). It distinguishes
+Mirror, Unreal Iris, Godot, and Valve GNS is in [PROJECT_STATUS.md](PROJECT_STATUS.md). It distinguishes
 implemented and tested framework behavior from external validation and remaining work.
 
 ## Capability status
@@ -169,29 +170,30 @@ production deployment feature.
 
 | Area | Status | Boundary |
 |---|---|---|
-| Framing, schema revisions, validation, auth admission, reconnect grace, room lifecycle, AOI/delta/priority delivery, replay persistence, and managed replication tests | Implemented and verified | Game-specific state, physics, and scene/team/owner predicates remain application-owned. |
-| Prediction, interpolation, deterministic impairment, bounded rewind queries, lifecycle cleanup, and malformed-input corpus testing | Implemented and verified | A complete gameplay shooter integration and broad property-based fuzzing remain open. |
-| Native TURN/STUN configuration and direct-then-relay signaling orchestration | Implemented and verified at the managed/configuration boundary | Actual NAT traversal needs two external peers, public network paths, and a deployed Coturn service. |
-| Linux native loopback and Windows x64 native loopback | Implemented and locally verified | The checked-in insecure smoke paths do not prove authenticated public operation. |
+| Framing, schema revisions, validation, auth admission, reconnect grace, room lifecycle, AOI/delta/priority delivery, replay persistence, and managed replication tests | Implemented and verified | Game-specific state, physics, and predicate functions remain application-owned; the lifecycle scheduler integrates supplied scene/team/owner/visibility/occlusion predicates. |
+| Prediction, interpolation, deterministic impairment, bounded rewind queries, lifecycle cleanup, and malformed-input corpus testing | Implemented and verified | A complete gameplay shooter integration and broader property-based fuzzing remain open. |
+| Native TURN/STUN configuration and direct-then-relay signaling orchestration | Implemented and verified at the managed/configuration boundary | The GS-managed Coturn service is deployed and allocation-validated on the build VPS; actual GNS NAT/relay traversal needs two external peers. |
+| Linux native loopback and Windows x64 native loopback | Implemented and CI-verified | The checked-in development smoke path is explicitly insecure; secure native execution is conditional on a protected certificate. |
 | Managed connection/room/entity/payload/impairment/reconnect/replay matrix | Implemented and CI-verified | Native full-scale storm, LAN, IPv4/IPv6, NAT-type, symmetric-NAT, relay, and hostile-network coverage remain open. |
 | Heartbeat RTT and managed loss-window accounting | Implemented and tested | Native GNS quality-derived local/remote loss percentages are exposed; raw native sequence-based packet-loss measurement is not available through the selected binding. |
 | Replay capture, persistence, redaction, deterministic playback, and regression fingerprints | Implemented and CI-verified | Full replay/load orchestration across every connection, room, payload, impairment, and reconnect-storm dimension remains open. |
-| Telemetry meters, Grafana dashboard, and renderer-neutral player overlay | Implemented and tested | Broader automated scene/team/owner AOI lifecycle integration and game-specific observability remain application work. |
-| Native certificate-aware transport policy and coordinator certificate installation | Implemented and tested | Trusted certificate provisioning and authenticated native client/server CI still require protected credentials and runners. |
+| Telemetry meters, Grafana dashboard, renderer-neutral player overlay, and filtered AOI lifecycle scheduling | Implemented and tested | Game-specific observability and gameplay policy remain application work. |
+| Native certificate-aware transport policy and coordinator certificate installation | Implemented and tested | Authenticated native CI executes only when a valid coordinator-issued certificate is provisioned. |
 | Steamworks `BeginAuthSession` ticket callbacks | Not available in the selected backend | The open-source GnsSharp binding does not expose Steamworks ticket callbacks; this requires the Steamworks backend/runtime. |
 | Migration validation and package signing | Implemented as policy/capability tooling | Coordinated data conversion and trusted package certificate provisioning are operational release responsibilities. |
 
-Still-open external or integration work includes: real NAT traversal with two external peers; Coturn
-deployment and VPS validation; Steamworks `BeginAuthSession` callbacks; authenticated native
-client/server CI with real certificates; native Windows runtime execution in hosted CI; LAN,
+Still-open external or integration work includes: real NAT traversal with two external peers;
+Steamworks `BeginAuthSession` callbacks; authenticated native client/server CI with a provisioned
+real certificate; LAN,
 IPv4/IPv6, symmetric-NAT, relay, and hostile-network matrices; broader scene/team/owner AOI
 lifecycle tests; full gameplay-level lag compensation; broader property-based fuzzing; native
 heartbeat sequence loss measurement; full replay/load orchestration; coordinated migration/data
 conversion tooling; and trusted package certificate provisioning/signing in CI. These are listed
 explicitly so a successful managed build is not mistaken for completion of those external systems.
 
-The authoritative execution checklist is [TASKS.md](TASKS.md), and the precise external
-limitations are tracked in [TODO.md](TODO.md) and [MILESTONES.md](MILESTONES.md). The project is
+The authoritative execution checklist and precise external limitations are consolidated in
+[PROJECT_STATUS.md](PROJECT_STATUS.md); the legacy [TASKS.md](TASKS.md), [TODO.md](TODO.md), and
+[MILESTONES.md](MILESTONES.md) files point to it. The project is
 ready for real game integration, but these open boundaries prevent a claim of public-Internet
 production readiness.
 
@@ -650,8 +652,8 @@ p2p.Validate();
 ```
 
 The signaling service must never expose long-lived TURN shared secrets to clients. Native config
-injection is implemented and tested, but actual relay selection still needs two external peers and
-a deployed Coturn service.
+injection and the GS-managed Coturn allocation path are implemented and tested; actual GNS relay
+selection still needs two external peers outside the VPS network.
 
 ## Prerequisites
 
@@ -686,7 +688,7 @@ are not available through this backend. The framework includes `ShardSupervisor`
 restarting dead local shard processes; deployment systems may still provide an outer supervisor for
 host-machine failures. The managed P2P/ICE entry points and native TURN credential configuration
 are present; use two external peers and a deployed relay to validate actual traversal.
-See [`TODO.md`](TODO.md).
+See [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
 ### Native GNS certificates and game join claims
 
@@ -796,12 +798,11 @@ docker compose -f docker/docker-compose.native.yml run --rm gnsnet-native-ci
 ```
 
 The harness proves Linux native loading, loopback setup, and managed contracts. It does not prove
-public NAT traversal, Coturn deployment, Steamworks authentication, or a certificate-authenticated
-client/server run. Windows x64 loopback has also been verified locally with the `Win64` backend and
-the built DLL, and CI now publishes the primary library with its native runtime dependencies and
-builds managed Linux and Win64 consumers for the downloaded artifacts. Keep `--insecure` limited
-to local development and isolated loopback validation; hosted authenticated
-execution and public traversal remain unverified.
+public NAT traversal, Steamworks authentication, or a certificate-authenticated client/server run.
+The GS-managed Coturn deployment and authenticated allocation have been separately validated on
+the build VPS. Windows x64 loopback has also been verified in hosted CI with the downloaded DLL;
+the authenticated native CI probe is conditional on `GNS_NATIVE_CERTIFICATE_B64`. Keep
+`--insecure` limited to local development and isolated loopback validation.
 
 To attempt local native P2P API wiring with two in-process peers, run the separately gated smoke
 benchmark. Its JSON result explicitly records success or unavailability:
@@ -831,9 +832,11 @@ git diff --check
 ```
 
 The hosted workflow runs on every branch push and pull request, repeats the deterministic managed
-matrix and replay fingerprint checks, and performs a scheduled daily verification. Native
-authenticated CI, real Coturn/VPS validation, and public-network matrix runs are intentionally
-not represented as passing merely because the managed workflow succeeds.
+matrix and replay fingerprint checks, executes Linux and Windows native artifact/runtime probes,
+and performs a scheduled daily verification. Native authenticated CI runs when
+`GNS_NATIVE_CERTIFICATE_B64` is provisioned; the package workflow similarly requires protected
+signing secrets. VPS allocation evidence is recorded in [`docs/turn-relay.md`](docs/turn-relay.md),
+while public two-peer matrix runs remain separate external validation.
 
 ## License
 
