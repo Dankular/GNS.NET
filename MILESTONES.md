@@ -107,7 +107,7 @@ Exit criteria: CI produces supported native artifacts, runs authenticated client
 - [ ] Add generated API/reference docs and templates for server, client, room, entity, and auth-provider adapters.
 - [~] Add structured metrics export (OpenTelemetry-compatible), server dashboards, and a player-facing network debug overlay; telemetry and overlay data exist, dashboards remain.
 - [~] Add persistent replay index/metadata, redaction, deterministic playback environments, and CI regression captures; persistent replay and CI smoke coverage exist, indexing/redaction remain.
-- [~] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output; benchmark scenarios exist but JSON output and all load dimensions remain.
+- [~] Add load-test scenarios for connections, rooms, entity counts, message sizes, packet loss, and reconnect storms with machine-readable JSON output; benchmark JSON output now exists, but native/load-dimension coverage remains.
 - [ ] Add compatibility policy, protocol version negotiation, migration tooling, package signing, and release smoke tests.
 
 Exit criteria: a new developer can scaffold a server/client, define messages and replicated entities, run a deterministic network test, inspect metrics, and reproduce a captured session from CI.

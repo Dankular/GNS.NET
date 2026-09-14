@@ -4,6 +4,7 @@ using GnsSharp;
 using MemoryPack;
 
 BenchmarkOptions options = BenchmarkOptions.Parse(args);
+var benchmarkResults = new List<object>();
 Console.WriteLine($"GNS.NET benchmark | scenario={options.Scenario} clients={options.Clients} entities={options.Entities} iterations={options.Iterations}");
 Console.WriteLine($"Runtime: {Environment.Version} | CPU threads: {Environment.ProcessorCount}");
 if (options.Scenario is "all" or "serialize") Run("MemoryPack serialize + deserialize", options, BenchmarkSerialization);
@@ -14,10 +15,16 @@ if (options.Scenario is "all" or "batch") Run("NetBatch encode + decode", option
 if (options.Scenario is "all" or "pipeline") Run("AOI + delta + priority snapshot pipeline", options, BenchmarkPipeline);
 if (options.Scenario is "all" or "prediction") Run("client prediction reconciliation", options, BenchmarkPrediction);
 if (options.Scenario is "all" or "replay") Run("persisted capture replay", options, BenchmarkReplay);
+if (options.JsonPath is not null)
+{
+    File.WriteAllText(options.JsonPath, System.Text.Json.JsonSerializer.Serialize(new { generatedAt = DateTimeOffset.UtcNow, scenario = options.Scenario, clients = options.Clients, entities = options.Entities, iterations = options.Iterations, results = benchmarkResults }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine($"Benchmark JSON: {options.JsonPath}");
+}
 
-static void Run(string name, BenchmarkOptions options, Func<BenchmarkOptions, BenchmarkResult> benchmark)
+void Run(string name, BenchmarkOptions options, Func<BenchmarkOptions, BenchmarkResult> benchmark)
 {
     BenchmarkResult result = benchmark(options);
+    benchmarkResults.Add(new { name, result.Operations, result.Bytes, elapsedMs = result.Elapsed.TotalMilliseconds, result.Allocated, opsPerSecond = result.Operations / Math.Max(result.Elapsed.TotalSeconds, double.Epsilon) });
     Console.WriteLine($"{name}: {result.Operations:N0} ops | {result.Operations / result.Elapsed.TotalSeconds:N0} ops/s | {result.Bytes / 1024d / 1024d:N2} MiB processed | {result.Allocated / (double)Math.Max(1, result.Operations):N1} B/op | {result.Elapsed.TotalMilliseconds:N1} ms");
 }
 
@@ -211,7 +218,7 @@ static NetBatch CreateBatch(int count)
 [MemoryPackable] public partial record BenchmarkInput(float Dx, float Dy);
 readonly record struct BenchmarkResult(long Operations, long Bytes, TimeSpan Elapsed, long Allocated);
 
-sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, bool RegisterTestAccount)
+sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int Iterations, int PayloadBytes, int Parallelism, string? NativePath, bool RegisterTestAccount, string? JsonPath)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -220,7 +227,7 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
         int parallelism = Number(args, "--parallelism", Environment.ProcessorCount);
         if (scenario is not ("all" or "serialize" or "stress" or "batch" or "pipeline" or "prediction" or "replay" or "transport" or "playfab")) throw new ArgumentException("--scenario must be all, serialize, stress, batch, pipeline, prediction, replay, transport, or playfab.");
         if (clients < 1 || entities < 1 || iterations < 1 || payload < 0 || parallelism < 1) throw new ArgumentException("Benchmark sizes must be positive; payload may be zero.");
-        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase));
+        return new(scenario, clients, entities, iterations, payload, parallelism, Value(args, "--native-path"), args.Contains("--register-test-account", StringComparer.OrdinalIgnoreCase), Value(args, "--json"));
     }
     private static int Number(string[] args, string name, int fallback) => int.TryParse(Value(args, name), out int value) ? value : fallback;
     private static string? Value(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }

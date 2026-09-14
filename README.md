@@ -516,6 +516,12 @@ dotnet build
 dotnet test
 ```
 
+The benchmark tool can emit CI-friendly JSON alongside its human-readable score:
+
+```powershell
+dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario all --json artifacts/gnsnet-benchmark.json
+```
+
 The test suite exercises serialization, framing, prediction/interpolation, validation, session
 resumption, auth, metrics, replay persistence, adaptive load shedding, TCP backend messaging, and
 shard migration without requiring a native GNS server. Running `samples/Poc` end-to-end additionally
