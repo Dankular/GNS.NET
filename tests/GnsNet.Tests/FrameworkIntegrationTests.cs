@@ -163,6 +163,15 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void SnapshotPipeline_SelectsConfiguredChannelAutomatically()
+    {
+        var interest = new InterestManager<string, TestEntity>(); interest.SetView("a", new InterestPoint(0, 0, 100));
+        var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(interest, new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y), _ => NetChannel.Event);
+        pipeline.Queue("a", new[] { new TestEntity { X = 1 } }, new TestState(), 6, 7, 1, 1);
+        Assert.Equal(NetChannel.Event, pipeline.Drain("a", 4).Single(x => x.Frame.Opcode == 6).Channel);
+    }
+
+    [Fact]
     public void PrioritySendQueue_ShedsFramesAtConfiguredBudgetAndAccountsBytes()
     {
         var queue = new PrioritySendQueue(maxFrames: 1, maxBytes: 64); var first = new NetFrame(1, 1, new byte[8]); var second = new NetFrame(2, 1, new byte[8]);

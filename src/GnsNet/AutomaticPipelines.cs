@@ -8,9 +8,10 @@ public sealed class SnapshotPipeline<TClientId, TEntity, TSnapshot> where TClien
     private readonly InterestManager<TClientId, TEntity> interest;
     private readonly DeltaCompressor<TSnapshot> delta;
     private readonly Func<TEntity, (float X, float Y)> position;
+    private readonly Func<TEntity, NetChannel> channel;
     private readonly Dictionary<TClientId, PrioritySendQueue> queues = new();
     private readonly Dictionary<TClientId, uint> lastSnapshotTicks = new();
-    public SnapshotPipeline(InterestManager<TClientId, TEntity> interest, DeltaCompressor<TSnapshot> delta, Func<TEntity, (float X, float Y)> position) { this.interest = interest; this.delta = delta; this.position = position; }
+    public SnapshotPipeline(InterestManager<TClientId, TEntity> interest, DeltaCompressor<TSnapshot> delta, Func<TEntity, (float X, float Y)> position, Func<TEntity, NetChannel>? channel = null) { this.interest = interest; this.delta = delta; this.position = position; this.channel = channel ?? (_ => NetChannel.State); }
     public void Queue(TClientId client, IEnumerable<TEntity> entities, TSnapshot snapshot, byte entityOpcode, byte snapshotOpcode, uint tick, float relevance)
     {
         if (float.IsNaN(relevance) || relevance < 0) throw new ArgumentOutOfRangeException(nameof(relevance));
@@ -22,7 +23,7 @@ public sealed class SnapshotPipeline<TClientId, TEntity, TSnapshot> where TClien
         }
         this.lastSnapshotTicks[client] = tick;
         if (!this.queues.TryGetValue(client, out PrioritySendQueue? queue)) this.queues[client] = queue = new();
-        foreach (TEntity entity in this.interest.Cull(client, entities, this.position)) queue.Enqueue(new NetFrame(entityOpcode, tick, NetSerializer.Serialize(entity)), NetChannel.State, relevance);
+        foreach (TEntity entity in this.interest.Cull(client, entities, this.position)) queue.Enqueue(new NetFrame(entityOpcode, tick, NetSerializer.Serialize(entity)), this.channel(entity), relevance);
         queue.Enqueue(new NetFrame(snapshotOpcode, tick, NetSerializer.Serialize(this.delta.Create(client!, snapshot))), NetChannel.State, relevance);
     }
     public IReadOnlyList<(NetFrame Frame, NetChannel Channel)> Drain(TClientId client, int maxFrames) => this.queues.TryGetValue(client, out PrioritySendQueue? queue) ? queue.Drain(maxFrames) : [];

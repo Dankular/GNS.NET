@@ -31,7 +31,7 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M2.2 Caller-free automatic replication tick
   - [x] Integrate lifecycle records with AOI/delta/batching.
   - [~] Automatically schedule dirty components (automatic world/snapshot tick scheduling is integrated; component-level dirty tracking remains open).
-  - [ ] Select channel and priority without per-message caller plumbing.
+  - [x] Select channel and priority without per-message caller plumbing.
 - [ ] M2.3 Automatic budgets and shed accounting
   - [x] Integrate byte/message budgets into scheduler.
   - [x] Add queue-age/starvation handling.
