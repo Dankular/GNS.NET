@@ -72,7 +72,7 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 ## Current evidence
 
 - `dotnet build GnsNet.sln -c Release --no-restore`: 0 warnings, 0 errors.
-- `dotnet test tests/GnsNet.Tests/GnsNet.Tests.csproj -c Release --no-build`: 168 passed, 1 expected
+- `dotnet test tests/GnsNet.Tests/GnsNet.Tests.csproj -c Release --no-build`: 173 passed, 1 expected
   Schannel/TLS platform skip.
 - Build VPS: GS-managed Coturn 4.6.3 was running; authenticated allocation exchanged 20/20 packets,
   completed channel binds, and reported 0% loss. The GNS.NET native container was rebuilt from the
@@ -83,6 +83,9 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
   The default compose value is pinned to that same commit; the container build emitted only upstream
   CMake warnings about unused GNS build options. The benchmark now embeds and validates application
   sequence numbers, reporting unique, duplicate, and missing native messages for loss measurement.
+- Managed protocol fuzzing now includes 3,000 seeded frame/batch round trips and mutation checks;
+  AOI lifecycle coverage includes independent multi-client scene/team views; Steam auth callback state
+  and ownership handling are unit-tested.
 - Hosted CI: Linux/Windows native artifact production, downloaded runtime smoke, and SHA-256 identity
   checks have passed on terminal runs. Workflow concurrency cancels superseded pushes and keeps the
   latest continuous trigger authoritative.

@@ -13,7 +13,7 @@ both protocol and MemoryPack schema revisions and reject unsupported revisions b
 
 The managed framework is suitable for beginning game integration. It is not a claim that this
 repository alone is production-ready for public-Internet deployment: real two-peer NAT traversal,
-Steamworks ticket callbacks, certificate-provisioned authenticated native CI, public-network matrix
+Steamworks runtime ticket validation, certificate-provisioned authenticated native CI, public-network matrix
 testing, and the release-operation items listed in [PROJECT_STATUS.md](PROJECT_STATUS.md) still
 require external systems or platform credentials. The GS-managed Coturn deployment has been
 validated on the build VPS; the missing proof is the two-peer path through it.
