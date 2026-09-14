@@ -78,7 +78,8 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
   completed channel binds, and reported 0% loss. The GNS.NET native container was rebuilt from the
   reviewed GNS commit `a424b7db649438acafb60c99cae6667587c42732` and ran the managed suite plus the
   native loopback harness. The pinned image completed 200/200 IPv6 loopback echoes at 0% loss and
-  140/200 echoes with configured 10% native loss (30% observed in this short impairment sample).
+  134/200 unique IPv4 sequence echoes with configured 10% native loss (33% observed in this short
+  impairment sample), with 0 duplicates and 66 missing sequences.
   The default compose value is pinned to that same commit; the container build emitted only upstream
   CMake warnings about unused GNS build options. The benchmark now embeds and validates application
   sequence numbers, reporting unique, duplicate, and missing native messages for loss measurement.
