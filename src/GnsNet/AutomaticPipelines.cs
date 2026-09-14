@@ -37,6 +37,12 @@ public sealed class AutomaticSnapshotScheduler<TClientId, TEntity, TSnapshot> wh
     private readonly HashSet<TClientId> clients = new();
     public AutomaticSnapshotScheduler(SnapshotPipeline<TClientId, TEntity, TSnapshot> pipeline) => this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
     public void AddClient(TClientId client) => this.clients.Add(client);
+    /// <summary>Registers a late joiner and queues its immediate authoritative world transfer.</summary>
+    public void AddClient(TClientId client, IEnumerable<TEntity> entities, TSnapshot snapshot, byte entityOpcode, byte snapshotOpcode, uint tick, float relevance = 1f)
+    {
+        this.AddClient(client);
+        this.pipeline.Queue(client, entities, snapshot, entityOpcode, snapshotOpcode, tick, relevance);
+    }
     public void RemoveClient(TClientId client) { this.clients.Remove(client); this.pipeline.Remove(client); }
     public void Publish(IEnumerable<TEntity> entities, Func<TClientId, TSnapshot> snapshot, Func<TClientId, float> relevance, byte entityOpcode, byte snapshotOpcode, uint tick)
     {

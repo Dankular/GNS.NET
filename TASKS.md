@@ -19,7 +19,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Add endpoint capability discovery.
 - [ ] M1.3 Room/scene lifecycle integration
   - [x] Add scene transition records.
-  - [ ] Add late-join state transfer integration.
+  - [x] Add late-join state transfer integration.
   - [ ] Add full reconnect-during-spawn integration coverage.
 
 ## M2 — Replication protocol

@@ -129,6 +129,19 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void AutomaticSnapshotScheduler_QueuesImmediateLateJoinTransfer()
+    {
+        var interest = new InterestManager<string, TestEntity>();
+        var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(interest, new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));
+        var scheduler = new AutomaticSnapshotScheduler<string, TestEntity, TestState>(pipeline);
+        scheduler.AddClient("late", new[] { new TestEntity { X = 4, Y = 5 } }, new TestState { Value = 9 }, 2, 3, 20);
+        var frames = scheduler.Drain("late", 8);
+        Assert.Equal(2, frames.Count);
+        Assert.Contains(frames, x => x.Frame.Opcode == 2);
+        Assert.Contains(frames, x => x.Frame.Opcode == 3);
+    }
+
+    [Fact]
     public async Task BackendBus_RetriesAndAuthenticatesPublish()
     {
         var flaky = new FlakyBus(); var bus = new ReliableBackendBus(flaky, new byte[32]) { RetryDelay = TimeSpan.Zero };
