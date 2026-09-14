@@ -134,6 +134,7 @@ public sealed class FrameworkIntegrationTests
         var interest = new InterestManager<string, TestEntity>();
         var pipeline = new SnapshotPipeline<string, TestEntity, TestState>(interest, new DeltaCompressor<TestState>((_, current) => current, (_, change) => change), entity => (entity.X, entity.Y));
         var scheduler = new AutomaticSnapshotScheduler<string, TestEntity, TestState>(pipeline);
+        interest.SetView("late", new InterestPoint(0, 0, 100));
         scheduler.AddClient("late", new[] { new TestEntity { X = 4, Y = 5 } }, new TestState { Value = 9 }, 2, 3, 20);
         var frames = scheduler.Drain("late", 8);
         Assert.Equal(2, frames.Count);
