@@ -90,6 +90,7 @@ public sealed class RoomLifecycle<TClientId> where TClientId : notnull
 }
 
 public enum RpcAuthority { ServerOnly, OwnerOnly, AnyAuthenticated }
+public readonly record struct RpcEndpointCapability(string Endpoint, RpcAuthority Authority);
 public readonly record struct RpcRequest(Guid RequestId, string Endpoint, long? ObjectId, string Caller, byte[] Payload, uint Tick);
 public readonly record struct RpcResponse(Guid RequestId, bool Accepted, byte[]? Payload, string? Error = null);
 
@@ -105,6 +106,22 @@ public sealed class RpcRouter
         if (!this.endpoints.TryAdd(endpoint, new(authority, handler))) throw new InvalidOperationException($"RPC '{endpoint}' is already registered.");
     }
     public void SetOwner(long objectId, string owner) => this.owners[objectId] = owner;
+    /// <summary>Returns the stable endpoint contract for capability negotiation.</summary>
+    public IReadOnlyCollection<RpcEndpointCapability> DescribeCapabilities()
+        => this.endpoints.OrderBy(x => x.Key, StringComparer.Ordinal)
+            .Select(x => new RpcEndpointCapability(x.Key, x.Value.Authority)).ToArray();
+
+    public bool TryGetCapability(string endpoint, out RpcEndpointCapability capability)
+    {
+        if (this.endpoints.TryGetValue(endpoint, out Endpoint? registered))
+        {
+            capability = new(endpoint, registered.Authority);
+            return true;
+        }
+
+        capability = default;
+        return false;
+    }
     /// <summary>Registers a typed MemoryPack command while retaining the endpoint authority policy.</summary>
     public void RegisterCommand<TRequest, TResponse>(string endpoint, RpcAuthority authority, Func<RpcRequest, TRequest, TResponse> handler)
         where TRequest : IMemoryPackable<TRequest> where TResponse : IMemoryPackable<TResponse>

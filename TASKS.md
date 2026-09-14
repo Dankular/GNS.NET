@@ -16,7 +16,7 @@ means a supported partial implementation or an external validation dependency; `
   - [x] Add typed MemoryPack command contracts.
   - [ ] Add targeted client routing.
   - [x] Add request timeout and expiry handling.
-  - [ ] Add endpoint capability discovery.
+  - [x] Add endpoint capability discovery.
 - [ ] M1.3 Room/scene lifecycle integration
   - [ ] Add scene transition records.
   - [ ] Add late-join state transfer integration.

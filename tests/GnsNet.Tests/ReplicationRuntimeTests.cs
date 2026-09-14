@@ -20,6 +20,23 @@ public sealed partial class ReplicationRuntimeTests
     }
 
     [Fact]
+    public void RpcRouter_DescribesStableEndpointCapabilities()
+    {
+        var router = new RpcRouter();
+        router.Register("z-last", RpcAuthority.ServerOnly, request => new(request.RequestId, true, null));
+        router.Register("a-first", RpcAuthority.AnyAuthenticated, request => new(request.RequestId, true, null));
+
+        Assert.Equal(new[]
+        {
+            new RpcEndpointCapability("a-first", RpcAuthority.AnyAuthenticated),
+            new RpcEndpointCapability("z-last", RpcAuthority.ServerOnly)
+        }, router.DescribeCapabilities());
+        Assert.True(router.TryGetCapability("a-first", out RpcEndpointCapability capability));
+        Assert.Equal(RpcAuthority.AnyAuthenticated, capability.Authority);
+        Assert.False(router.TryGetCapability("missing", out _));
+    }
+
+    [Fact]
     public void RpcRouter_EnforcesAuthorityAndCorrelatesResponse()
     {
         var router = new RpcRouter(); router.SetOwner(4, "alice");
