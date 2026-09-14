@@ -474,6 +474,10 @@ host-machine failures. The managed P2P/ICE entry points are present, but the pin
 native commit documents broken P2P support; use an updated native GNS build to validate traversal.
 See [`TODO.md`](TODO.md).
 
+For a reproducible external native runtime, use the checked-in Docker harness described in
+[`docs/native-runtime-container.md`](docs/native-runtime-container.md). It builds GNS and runs the
+managed suite plus the native loopback benchmark in one isolated environment.
+
 ## Using `GnsNet` in a new game project
 
 Reference `src/GnsNet/GnsNet.csproj` (or, once published, a `GnsNet` package) from your game's

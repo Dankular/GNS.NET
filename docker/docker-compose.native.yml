@@ -1,0 +1,11 @@
+services:
+  gnsnet-native-ci:
+    build:
+      context: ..
+      dockerfile: docker/native-ci.Dockerfile
+      args:
+        GNS_REF: ${GNS_REF:-master}
+    environment:
+      LD_LIBRARY_PATH: /opt/gns/lib
+    volumes:
+      - ../artifacts:/workspace/artifacts
