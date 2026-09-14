@@ -80,7 +80,7 @@ means a supported partial implementation or an external validation dependency; `
 - [~] M5.2 Native transport verification
   - [x] Linux Docker native build and loopback verification.
   - [x] Windows x64 native runtime and explicit-library-path loopback verification.
-  - [~] Execute the downloaded Linux and Windows native artifacts in hosted CI (workflow integrated; hosted results pending).
+  - [x] Execute the downloaded Linux and Windows native artifacts in hosted CI (Linux and Windows runtime smoke jobs passed; cross-artifact checksum verification is separately enforced by the consumer job).
   - [ ] Authenticated native CI client/server run.
   - [x] Explicitly gate the development loopback harness behind `--insecure` and publish a no-secrets auth capability report.
 - [ ] M5.3 Native CI artifacts

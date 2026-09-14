@@ -97,7 +97,7 @@ Exit criteria: a sample shooter can register hitboxes, perform an authoritative 
 - [~] Add a supported signaling/rendezvous adapter and TURN/relay configuration contract for ICE, with credential rotation and failure fallback; authenticated signaling and native TURN server/user/password injection are integrated, but native traversal remains unverified.
 - [ ] Add LAN, NAT-type, IPv4/IPv6, symmetric-connect, relay, and hostile-network integration tests.
 - [~] Fix and verify the native loopback acceptance path; Linux Docker and Windows x64 explicit-library-path loopback runs are verified, while authenticated native CI and public/native traversal remain.
-- [~] Cache vcpkg/native dependencies and publish native binaries plus required runtime dependencies as CI artifacts; jobs now validate x64 format and SHA-256 identity before and after transfer, but hosted CI publication has not yet executed.
+- [x] Cache vcpkg/native dependencies and publish native binaries plus required runtime dependencies as CI artifacts; hosted Linux and Windows builds produced artifacts and both downloaded runtime smoke jobs passed, with cross-artifact SHA-256 verification enforced by CI.
 
 Exit criteria: CI produces supported native artifacts, runs authenticated client/server transport tests, and reports throughput, RTT, loss, connection setup, and P2P traversal results.
 
