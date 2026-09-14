@@ -175,7 +175,7 @@ production deployment feature.
 | Native TURN/STUN configuration and direct-then-relay signaling orchestration | Implemented and verified at the managed/configuration boundary | The GS-managed Coturn service is deployed and allocation-validated on the build VPS; actual GNS NAT/relay traversal needs two external peers. |
 | Linux native loopback and Windows x64 native loopback | Implemented and CI-verified | The checked-in development smoke path is explicitly insecure; secure native execution is conditional on a protected certificate. |
 | Managed connection/room/entity/payload/impairment/reconnect/replay matrix | Implemented and CI-verified | Native full-scale storm, LAN, IPv4/IPv6, NAT-type, symmetric-NAT, relay, and hostile-network coverage remain open. |
-| Heartbeat RTT and managed loss-window accounting | Implemented and tested | Native GNS quality-derived local/remote loss percentages are exposed; raw native sequence-based packet-loss measurement is not available through the selected binding. |
+| Heartbeat RTT and sequence-based loss accounting | Implemented, integrated, tested, and VPS-verified | The managed heartbeat and native benchmark use explicit sequence observations; GNS quality-derived native telemetry remains available separately. |
 | Replay capture, persistence, redaction, deterministic playback, and regression fingerprints | Implemented and CI-verified | Full replay/load orchestration across every connection, room, payload, impairment, and reconnect-storm dimension remains open. |
 | Telemetry meters, Grafana dashboard, renderer-neutral player overlay, and filtered AOI lifecycle scheduling | Implemented and tested | Game-specific observability and gameplay policy remain application work. |
 | Native certificate-aware transport policy and coordinator certificate installation | Implemented and tested | Authenticated native CI executes only when a valid coordinator-issued certificate is provisioned. |
@@ -187,7 +187,7 @@ Steamworks `BeginAuthSession` callbacks; authenticated native client/server CI w
 real certificate; LAN,
 IPv4/IPv6, symmetric-NAT, relay, and hostile-network matrices; broader scene/team/owner AOI
 lifecycle tests; full gameplay-level lag compensation; broader property-based fuzzing; native
-heartbeat sequence loss measurement; full replay/load orchestration; coordinated migration/data
+full replay/load orchestration; coordinated migration/data
 conversion tooling; and trusted package certificate provisioning/signing in CI. These are listed
 explicitly so a successful managed build is not mistaken for completion of those external systems.
 

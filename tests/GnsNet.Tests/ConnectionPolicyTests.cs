@@ -289,6 +289,30 @@ public sealed class ConnectionPolicyTests
     {
         var tracker = new HeartbeatTracker(); var metrics = new ConnectionMetrics(); byte[] probe = tracker.CreateProbe(metrics);
         Assert.True(tracker.Acknowledge(probe, metrics)); Assert.False(tracker.Acknowledge(probe, metrics)); Assert.True(metrics.RttMilliseconds >= 0);
+        Assert.Equal(1, tracker.SentCount); Assert.Equal(1, tracker.AcknowledgedCount); Assert.Equal(1, tracker.DuplicateAcknowledgementCount);
+        Assert.Equal(0, tracker.ExpiredCount); Assert.Equal(0, tracker.LossPercent);
+    }
+
+    [Fact]
+    public void SequenceLossTracker_ReportsGapsAndDuplicatesWithinBoundedWindow()
+    {
+        var tracker = new SequenceLossTracker(16);
+        uint first = tracker.Next(); uint second = tracker.Next(); uint third = tracker.Next();
+        Assert.Equal(1u, first); Assert.Equal(2u, second); Assert.Equal(3u, third);
+        Assert.True(tracker.Observe(first)); Assert.True(tracker.Observe(third));
+        Assert.False(tracker.Observe(third));
+        Assert.Equal(3, tracker.Sent); Assert.Equal(2, tracker.ReceivedUnique); Assert.Equal(1, tracker.Duplicates);
+        Assert.Equal(1, tracker.Missing); Assert.Equal(33.333, tracker.LossPercent, 2);
+    }
+
+    [Fact]
+    public void SequenceLossTracker_BoundsLongRunningObservationWindow()
+    {
+        var tracker = new SequenceLossTracker(2);
+        uint first = tracker.Next(); uint second = tracker.Next(); uint third = tracker.Next();
+        Assert.True(tracker.Observe(first)); Assert.True(tracker.Observe(second)); Assert.True(tracker.Observe(third));
+        Assert.Equal(3, tracker.Sent); Assert.Equal(1, tracker.ReceivedUnique);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SequenceLossTracker(0));
     }
 
     [Fact]

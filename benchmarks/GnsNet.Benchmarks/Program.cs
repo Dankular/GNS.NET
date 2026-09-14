@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Buffers.Binary;
 using GnsNet;
 using GnsSharp;
 using MemoryPack;
@@ -105,7 +106,7 @@ static void RunTransport(BenchmarkOptions options)
     try
     {
         TransportResult result = BenchmarkTransport(options, 1);
-        Console.WriteLine($"GNS loopback transport: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} messages/s | {result.Bytes / 1024d / 1024d:N2} MiB on wire | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | loss={result.Loss:P2} | connect p50={result.ConnectP50.TotalMilliseconds:N2} ms");
+        Console.WriteLine($"GNS loopback transport: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} messages/s | {result.Bytes / 1024d / 1024d:N2} MiB on wire | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | loss={result.Loss:P2} | sequences={result.UniqueSequences:N0}/{result.SentSequences:N0} unique | duplicates={result.DuplicateSequences:N0} missing={result.MissingSequences:N0} | connect p50={result.ConnectP50.TotalMilliseconds:N2} ms");
     }
     catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
     {
@@ -119,7 +120,7 @@ static void RunAuthenticatedTransport(BenchmarkOptions options)
     try
     {
         TransportResult result = BenchmarkTransport(options with { Insecure = true }, 1, authenticated: true);
-        Console.WriteLine($"GNS authenticated loopback transport: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} messages/s | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | connect p50={result.ConnectP50.TotalMilliseconds:N2} ms");
+        Console.WriteLine($"GNS authenticated loopback transport: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} messages/s | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | sequences={result.UniqueSequences:N0}/{result.SentSequences:N0} unique | connect p50={result.ConnectP50.TotalMilliseconds:N2} ms");
     }
     catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException or NotSupportedException or TimeoutException)
     {
@@ -246,31 +247,42 @@ static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst, b
         while (!connected.IsSet && connectWait.Elapsed < TimeSpan.FromSeconds(10)) Thread.Sleep(1);
         if (!connected.IsSet) throw new TimeoutException("Timed out waiting for GNS loopback connections.");
 
-        byte[] payload = new byte[Math.Clamp(options.PayloadBytes, 1, 64 * 1024)];
-        long sent = 0, received = 0;
+        byte[] payload = new byte[Math.Max(8, Math.Clamp(options.PayloadBytes, 1, 64 * 1024))];
+        var sequences = new SequenceLossTracker(checked(options.Clients * options.Iterations * Math.Max(1, burst) + 1));
+        long received = 0;
         List<double> rtts = new();
         Stopwatch timer = Stopwatch.StartNew();
         for (int tick = 0; tick < options.Iterations; tick++)
         {
             long sentAt = Stopwatch.GetTimestamp();
-            foreach (GnsClient client in clients) for (int message = 0; message < burst; message++) { client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay); sent++; }
+            foreach (GnsClient client in clients)
+                for (int message = 0; message < burst; message++)
+                {
+                    BinaryPrimitives.WriteUInt32LittleEndian(payload, sequences.Next());
+                    client.Send(payload, ESteamNetworkingSendType.UnreliableNoDelay);
+                }
             long iterationReceived = 0; int expected = checked(clients.Count * burst); Stopwatch pump = Stopwatch.StartNew();
             while (iterationReceived < expected && pump.Elapsed < TimeSpan.FromMilliseconds(100))
             {
                 foreach (ReceivedMessage message in server.Poll()) server.Send(message.Connection, message.Data, ESteamNetworkingSendType.UnreliableNoDelay);
-                foreach (GnsClient client in clients) iterationReceived += client.Poll().Count;
+                foreach (GnsClient client in clients)
+                    foreach (ReceivedMessage message in client.Poll())
+                    {
+                        iterationReceived++;
+                        if (message.Data.Length >= 4) sequences.Observe(BinaryPrimitives.ReadUInt32LittleEndian(message.Data));
+                    }
                 if (iterationReceived < expected) Thread.Yield();
             }
             received += iterationReceived;
             if (iterationReceived > 0) rtts.Add((Stopwatch.GetTimestamp() - sentAt) * 1000d / Stopwatch.Frequency);
         }
         timer.Stop();
-        double loss = sent == 0 ? 0 : 1d - (double)received / sent;
+        double loss = sequences.LossPercent / 100d;
         rtts.Sort();
         TimeSpan Percentile(double p) => rtts.Count == 0 ? TimeSpan.Zero : TimeSpan.FromMilliseconds(rtts[(int)Math.Clamp(Math.Ceiling(rtts.Count * p) - 1, 0, rtts.Count - 1)]);
         connectTimes.Sort();
         TimeSpan ConnectPercentile(double p) => TimeSpan.FromMilliseconds(connectTimes.Count == 0 ? 0 : connectTimes[(int)Math.Clamp(Math.Ceiling(connectTimes.Count * p) - 1, 0, connectTimes.Count - 1)].TotalMilliseconds);
-        return new(received, received * (long)payload.Length * 2, timer.Elapsed, loss, Percentile(.50), Percentile(.99), ConnectPercentile(.50));
+        return new(received, received * (long)payload.Length * 2, timer.Elapsed, loss, Percentile(.50), Percentile(.99), ConnectPercentile(.50), sequences.Sent, sequences.ReceivedUnique, sequences.Duplicates, sequences.Missing);
     }
     finally { foreach (GnsClient client in clients) client.Dispose(); }
 }
@@ -402,5 +414,5 @@ sealed record BenchmarkOptions(string Scenario, int Clients, int Entities, int I
     private static string? Value(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 }
 
-readonly record struct TransportResult(long Messages, long Bytes, TimeSpan Elapsed, double Loss, TimeSpan P50, TimeSpan P99, TimeSpan ConnectP50);
+readonly record struct TransportResult(long Messages, long Bytes, TimeSpan Elapsed, double Loss, TimeSpan P50, TimeSpan P99, TimeSpan ConnectP50, long SentSequences = 0, long UniqueSequences = 0, long DuplicateSequences = 0, long MissingSequences = 0);
 readonly record struct SaturationPoint(int Burst, long Echoed, double MessagesPerSecond, double LossPercent, double P50Milliseconds, double P99Milliseconds, long OfferedBytesPerTick);

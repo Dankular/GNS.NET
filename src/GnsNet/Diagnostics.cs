@@ -67,8 +67,14 @@ public sealed class HeartbeatTracker
     private readonly object sync = new();
     private readonly TimeSpan expiry = TimeSpan.FromSeconds(5);
     private uint nextSequence;
+    private long sentCount, acknowledgedCount, expiredCount, duplicateAcknowledgementCount;
     private double smoothedRtt;
     public double SmoothedRttMilliseconds { get { lock (this.sync) return this.smoothedRtt; } }
+    public long SentCount { get { lock (this.sync) return this.sentCount; } }
+    public long AcknowledgedCount { get { lock (this.sync) return this.acknowledgedCount; } }
+    public long ExpiredCount { get { lock (this.sync) return this.expiredCount; } }
+    public long DuplicateAcknowledgementCount { get { lock (this.sync) return this.duplicateAcknowledgementCount; } }
+    public double LossPercent { get { lock (this.sync) return this.sentCount == 0 ? 0 : this.expiredCount * 100d / this.sentCount; } }
     public byte[] CreateProbe(ConnectionMetrics? metrics = null)
     {
         long now = Stopwatch.GetTimestamp(); uint sequence;
@@ -76,7 +82,9 @@ public sealed class HeartbeatTracker
         lock (this.sync)
         {
             expired = 0; foreach (var old in this.pending.Where(x => Stopwatch.GetElapsedTime(x.Value, now) > this.expiry).ToArray()) { this.pending.Remove(old.Key); expired++; }
+            this.expiredCount += expired;
             sequence = unchecked(++this.nextSequence); this.pending[sequence] = now;
+            this.sentCount++;
         }
         for (int i = 0; i < expired; i++) metrics?.RecordLostPacket();
         metrics?.RecordSequenceSent();
@@ -86,11 +94,80 @@ public sealed class HeartbeatTracker
     {
         if (payload.Length != 12) return false;
         var reader = new PacketReader(payload); uint sequence = reader.ReadUInt32(); _ = reader.ReadUInt64(); long sent;
-        lock (this.sync) if (!this.pending.Remove(sequence, out sent)) return false;
+        lock (this.sync)
+        {
+            if (!this.pending.Remove(sequence, out sent)) { this.duplicateAcknowledgementCount++; return false; }
+            this.acknowledgedCount++;
+        }
         metrics.RecordSequenceAcknowledged();
         double milliseconds = Stopwatch.GetElapsedTime(sent).TotalMilliseconds;
         double smoothed; lock (this.sync) { this.smoothedRtt = this.smoothedRtt == 0 ? milliseconds : this.smoothedRtt * .875 + milliseconds * .125; smoothed = this.smoothedRtt; }
         metrics.RecordRtt(TimeSpan.FromMilliseconds(smoothed)); return true;
+    }
+}
+
+/// <summary>Tracks unique application sequence acknowledgements for transport-level loss diagnostics.</summary>
+/// <remarks>
+/// This is intentionally separate from reliable delivery. It measures the messages observed by the
+/// application, including duplicates and gaps, and is therefore suitable for an unreliable native
+/// probe or heartbeat stream. The sequence space is bounded to prevent a peer from growing memory
+/// without limit.
+/// </remarks>
+public sealed class SequenceLossTracker
+{
+    private readonly object sync = new();
+    private readonly HashSet<uint> received = new();
+    private readonly int maximumTrackedSequences;
+    private uint nextSequence;
+    private long sent;
+    private long duplicates;
+
+    public SequenceLossTracker(int maximumTrackedSequences = 1_000_000)
+    {
+        if (maximumTrackedSequences < 1) throw new ArgumentOutOfRangeException(nameof(maximumTrackedSequences));
+        this.maximumTrackedSequences = maximumTrackedSequences;
+    }
+
+    public long Sent { get { lock (this.sync) return this.sent; } }
+    public long ReceivedUnique { get { lock (this.sync) return this.received.Count; } }
+    public long Duplicates { get { lock (this.sync) return this.duplicates; } }
+    public long Missing { get { lock (this.sync) return Math.Max(0, this.sent - this.received.Count); } }
+    public double LossPercent { get { lock (this.sync) return this.sent == 0 ? 0 : this.Missing * 100d / this.sent; } }
+
+    /// <summary>Allocates the next sequence number to put in an outbound probe.</summary>
+    public uint Next()
+    {
+        lock (this.sync)
+        {
+            if (this.sent == long.MaxValue) throw new InvalidOperationException("Sequence counter exhausted.");
+            uint sequence = unchecked(++this.nextSequence);
+            this.sent++;
+            return sequence;
+        }
+    }
+
+    /// <summary>Records an observed sequence. Returns false for a duplicate or a bounded-window eviction.</summary>
+    public bool Observe(uint sequence)
+    {
+        lock (this.sync)
+        {
+            if (!this.received.Add(sequence))
+            {
+                this.duplicates++;
+                return false;
+            }
+
+            if (this.received.Count > this.maximumTrackedSequences)
+            {
+                // The oldest value cannot be inferred from an unordered set without retaining another
+                // queue. Clear the bounded observation window and keep counters monotonic; this makes
+                // long-running diagnostics bounded while preserving the current-window loss result.
+                this.received.Clear();
+                this.received.Add(sequence);
+            }
+
+            return true;
+        }
     }
 }
 

@@ -27,9 +27,10 @@ hosted native runtime jobs run both address families. This is dual-stack LAN cov
 relay, or public-network traversal test.
 
 To exercise native packet impairment in the same harness, add `--native-loss-percent 10` (0--100).
-This maps to GNS's development-only send and receive loss configuration and reports the observed
-echo loss; it is useful for hostile-network regression checks but does not emulate kernel NAT or
-replace independent public peers.
+This maps to GNS's development-only send and receive loss configuration. Every probe payload carries
+an application sequence, so the result reports unique sequences, duplicates, missing sequences, and
+the derived loss percentage rather than relying only on message counts. It is useful for hostile-
+network regression checks but does not emulate kernel NAT or replace independent public peers.
 
 Without a native GNS library the tool reports transport capacity as unavailable; application-layer scenarios remain runnable.
 

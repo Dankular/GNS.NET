@@ -80,7 +80,8 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
   native loopback harness. The pinned image completed 200/200 IPv6 loopback echoes at 0% loss and
   140/200 echoes with configured 10% native loss (30% observed in this short impairment sample).
   The default compose value is pinned to that same commit; the container build emitted only upstream
-  CMake warnings about unused GNS build options.
+  CMake warnings about unused GNS build options. The benchmark now embeds and validates application
+  sequence numbers, reporting unique, duplicate, and missing native messages for loss measurement.
 - Hosted CI: Linux/Windows native artifact production, downloaded runtime smoke, and SHA-256 identity
   checks have passed on terminal runs. Workflow concurrency cancels superseded pushes and keeps the
   latest continuous trigger authoritative.
@@ -93,7 +94,7 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 Real NAT traversal with two external peers; full public Coturn/VPS peer validation; coordinator-issued
 native certificate provisioning in CI; Steamworks `BeginAuthSession` callbacks unavailable through the
 selected open-source GnsSharp binding; authenticated native client/server CI with real certificates;
-full gameplay AOI/lag-compensation integration; broader fuzzing; native heartbeat sequence telemetry;
+full gameplay AOI/lag-compensation integration; broader fuzzing;
 complete replay/load orchestration; coordinated migration/data conversion; and trusted package
 certificate provisioning/signing remain open. Windows native loopback is CI-verified; only secure
 certificate-backed execution remains conditional.
