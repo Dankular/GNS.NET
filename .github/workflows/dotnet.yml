@@ -181,6 +181,8 @@ jobs:
         key: gns-native-windows-${{ env.GNS_REF }}-${{ hashFiles('.github/workflows/dotnet.yml') }}
     - name: Install Ninja
       run: choco install ninja --no-progress -y
+    - name: Setup MSVC environment
+      uses: ilammy/msvc-dev-cmd@v1
     - name: Fetch GameNetworkingSockets
       shell: pwsh
       run: |
@@ -201,7 +203,7 @@ jobs:
       working-directory: native/GameNetworkingSockets
     - name: Configure native transport
       shell: pwsh
-      run: cmake -S native/GameNetworkingSockets -B native/build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+      run: cmake -S native/GameNetworkingSockets -B native/build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
     - name: Build native transport
       shell: pwsh
       run: cmake --build native/build-windows --config Release --parallel
