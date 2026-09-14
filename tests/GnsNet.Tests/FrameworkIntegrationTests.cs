@@ -154,6 +154,14 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public void PrioritySendQueue_ShedsFramesAtConfiguredBudgetAndAccountsBytes()
+    {
+        var queue = new PrioritySendQueue(maxFrames: 1, maxBytes: 64); var first = new NetFrame(1, 1, new byte[8]); var second = new NetFrame(2, 1, new byte[8]);
+        Assert.True(queue.Enqueue(first, NetChannel.State, 1)); Assert.False(queue.Enqueue(second, NetChannel.State, 1));
+        Assert.Equal(1, queue.ShedFrames); Assert.True(queue.ShedBytes > 0); Assert.Single(queue.Drain(1)); Assert.Equal(0, queue.QueuedBytes);
+    }
+
+    [Fact]
     public async Task BackendBus_RetriesAndAuthenticatesPublish()
     {
         var flaky = new FlakyBus(); var bus = new ReliableBackendBus(flaky, new byte[32]) { RetryDelay = TimeSpan.Zero };

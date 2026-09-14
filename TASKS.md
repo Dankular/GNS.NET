@@ -33,9 +33,9 @@ means a supported partial implementation or an external validation dependency; `
   - [~] Automatically schedule dirty components (automatic world/snapshot tick scheduling is integrated; component-level dirty tracking remains open).
   - [ ] Select channel and priority without per-message caller plumbing.
 - [ ] M2.3 Automatic budgets and shed accounting
-  - [ ] Integrate byte/message budgets into scheduler.
+  - [x] Integrate byte/message budgets into scheduler.
   - [ ] Add queue-age/starvation handling.
-  - [ ] Expose per-connection shed/drop decisions.
+  - [~] Expose per-connection shed/drop decisions (queue-level shed counters are integrated; host aggregation remains open).
 - [ ] M2.4 Malformed-input property/fuzz suite
   - [ ] Fuzz malformed snapshots and baseline loss.
   - [ ] Fuzz schema mismatch, tick wraparound, and partial entities.
