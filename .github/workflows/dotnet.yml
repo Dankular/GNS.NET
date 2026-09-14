@@ -8,6 +8,16 @@ on:
     branches: [ "claude/gracious-hawking-xnxxt5" ]
   pull_request:
     branches: [ "claude/gracious-hawking-xnxxt5" ]
+  workflow_dispatch:
+    inputs:
+      gns_ref:
+        description: "Pinned GameNetworkingSockets commit, tag, or branch"
+        required: false
+        default: "master"
+        type: string
+
+env:
+  GNS_REF: ${{ inputs.gns_ref || 'master' }}
 
 jobs:
   build:
@@ -45,11 +55,11 @@ jobs:
         path: |
           ~/.cache/vcpkg
           native/GameNetworkingSockets
-        key: gns-native-linux-${{ hashFiles('.github/workflows/dotnet.yml') }}
+        key: gns-native-linux-${{ env.GNS_REF }}-${{ hashFiles('.github/workflows/dotnet.yml') }}
     - name: Install native build tools
       run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev protobuf-compiler
     - name: Fetch GameNetworkingSockets
-      run: if [ ! -d native/GameNetworkingSockets/.git ]; then git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets; fi
+      run: if [ ! -d native/GameNetworkingSockets/.git ]; then git clone --depth 1 --branch "$GNS_REF" https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets; fi
     - name: Install native dependencies
       run: vcpkg install --triplet x64-linux
       working-directory: native/GameNetworkingSockets
@@ -57,11 +67,22 @@ jobs:
       run: cmake -S native/GameNetworkingSockets -B native/build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
     - name: Build native transport
       run: cmake --build native/build-linux --config Release --parallel
+    - name: Validate and fingerprint Linux artifact
+      shell: bash
+      run: |
+        set -euo pipefail
+        artifact="$(find native/build-linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
+        test -n "$artifact"
+        file "$artifact" | grep -E 'ELF 64-bit.*x86-64'
+        test "$(stat -c '%s' "$artifact")" -gt 0
+        (cd "$(dirname "$artifact")" && sha256sum "$(basename "$artifact")") > native/build-linux/gns-artifact.sha256
     - name: Upload native Linux artifact
       uses: actions/upload-artifact@v4
       with:
         name: gamenetworkingsockets-linux-x64
-        path: native/build-linux/**/libGameNetworkingSockets.so*
+        path: |
+          native/build-linux/**/libGameNetworkingSockets.so*
+          native/build-linux/gns-artifact.sha256
         if-no-files-found: error
 
   native-windows:
@@ -74,12 +95,12 @@ jobs:
         path: |
           ${{ env.VCPKG_INSTALLATION_ROOT }}
           native/GameNetworkingSockets
-        key: gns-native-windows-${{ hashFiles('.github/workflows/dotnet.yml') }}
+        key: gns-native-windows-${{ env.GNS_REF }}-${{ hashFiles('.github/workflows/dotnet.yml') }}
     - name: Install Ninja
       run: choco install ninja --no-progress -y
     - name: Fetch GameNetworkingSockets
       shell: pwsh
-      run: if (-not (Test-Path native/GameNetworkingSockets/.git)) { git clone --depth 1 --branch master https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets }
+      run: if (-not (Test-Path native/GameNetworkingSockets/.git)) { git clone --depth 1 --branch $env:GNS_REF https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets }
     - name: Install native dependencies
       shell: pwsh
       run: vcpkg install --triplet x64-windows
@@ -90,11 +111,26 @@ jobs:
     - name: Build native transport
       shell: pwsh
       run: cmake --build native/build-windows --config Release --parallel
+    - name: Validate and fingerprint Windows artifact
+      shell: pwsh
+      run: |
+        $artifact = Get-ChildItem -Path native/build-windows -Recurse -Filter GameNetworkingSockets.dll | Select-Object -First 1
+        if ($null -eq $artifact) { throw "GameNetworkingSockets.dll was not produced" }
+        if ($artifact.Length -le 0) { throw "Native artifact is empty" }
+        $bytes = [IO.File]::ReadAllBytes($artifact.FullName)
+        if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw "Native artifact is not a PE image" }
+        $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+        if ($peOffset -lt 0 -or $peOffset + 6 -gt $bytes.Length -or $bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45 -or $bytes[$peOffset + 2] -ne 0 -or $bytes[$peOffset + 3] -ne 0) { throw "PE signature is invalid" }
+        $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+        if ($machine -ne 0x8664) { throw "Expected x64 PE image, machine was 0x{0:X4}" -f $machine }
+        (Get-FileHash -Algorithm SHA256 $artifact.FullName).Hash.ToLowerInvariant() + "  " + $artifact.Name | Set-Content native/build-windows/gns-artifact.sha256
     - name: Upload native Windows artifact
       uses: actions/upload-artifact@v4
       with:
         name: gamenetworkingsockets-windows-x64
-        path: native/build-windows/**/GameNetworkingSockets.dll
+        path: |
+          native/build-windows/**/GameNetworkingSockets.dll
+          native/build-windows/gns-artifact.sha256
         if-no-files-found: error
 
   native-artifact-consumer:
@@ -114,5 +150,15 @@ jobs:
     - name: Verify native artifact payloads
       shell: bash
       run: |
-        test -n "$(find native-artifacts/linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
-        test -n "$(find native-artifacts/windows -type f -name 'GameNetworkingSockets.dll' -print -quit)"
+        set -euo pipefail
+        linux_artifact="$(find native-artifacts/linux -type f -name 'libGameNetworkingSockets.so*' -print -quit)"
+        windows_artifact="$(find native-artifacts/windows -type f -name 'GameNetworkingSockets.dll' -print -quit)"
+        test -n "$linux_artifact"
+        test -n "$windows_artifact"
+        test -f "$(find native-artifacts/linux -type f -name 'gns-artifact.sha256' -print -quit)"
+        test -f "$(find native-artifacts/windows -type f -name 'gns-artifact.sha256' -print -quit)"
+        file "$linux_artifact" | grep -E 'ELF 64-bit.*x86-64'
+        file "$windows_artifact" | grep -E 'PE32\+.*x86-64|PE32\+ executable.*AMD64'
+        (cd native-artifacts/linux && sha256sum --check "$(find . -name gns-artifact.sha256 -print -quit)")
+        (cd native-artifacts/windows && sha256sum --check "$(find . -name gns-artifact.sha256 -print -quit)")
+        echo "Native Linux and Windows artifacts passed identity and architecture validation."

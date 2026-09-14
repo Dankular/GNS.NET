@@ -26,7 +26,7 @@ means a supported partial implementation or an external validation dependency; `
 
 - [~] M2.1 Generated replicated-field encoders
   - [x] Generate field IDs and stable wire ordering.
-  - [~] Generate encode/decode methods using dirty masks (generated contract delegates field payload encoding to the registered codec; type-specific field payload generation remains open).
+  - [x] Generate type-specific property encode/decode methods using dirty masks (custom callback overload remains available for special codecs).
   - [x] Generate schema compatibility metadata.
 - [ ] M2.2 Caller-free automatic replication tick
   - [x] Integrate lifecycle records with AOI/delta/batching.
@@ -77,6 +77,7 @@ means a supported partial implementation or an external validation dependency; `
 - [ ] M5.3 Native CI artifacts
   - [x] Cache native dependencies.
   - [x] Publish and consume Linux/Windows artifacts in CI.
+  - [x] Validate x64 format and SHA-256 identity after artifact production and download.
 
 ## M6 — Developer experience and operations
 
