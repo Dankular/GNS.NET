@@ -52,6 +52,29 @@ public sealed class NetSchemaGenerator : IIncrementalGenerator
                 string schemaVersion = schema ? "GeneratedNetworkSchemaVersion" : "1";
                 members.AppendLine($"    public byte[] EncodeGeneratedFields(global::GnsNet.DirtyFieldMask mask, global::System.Func<int, byte[]> fieldEncoder) => global::GnsNet.DirtyFieldMaskCodec.Encode({schemaVersion}, mask, fieldEncoder);");
                 members.AppendLine($"    public static (int SchemaVersion, global::GnsNet.DirtyFieldMask Mask, global::System.Collections.Generic.IReadOnlyDictionary<int, byte[]> Fields) DecodeGeneratedFields(global::System.ReadOnlySpan<byte> data, int maximumFieldBytes = 1048576) => global::GnsNet.DirtyFieldMaskCodec.Decode(data, {schemaVersion}, GeneratedNetworkFieldCount, maximumFieldBytes);");
+                string encoders = string.Join(", ", fields.Select((field, index) => $"{index} => global::MemoryPack.MemoryPackSerializer.Serialize(this.{field.Identifier.Text})"));
+                members.AppendLine($"    /// <summary>Serializes dirty properties using their declared CLR types.</summary>");
+                members.AppendLine($"    public byte[] EncodeGeneratedFields(global::GnsNet.DirtyFieldMask mask) => global::GnsNet.DirtyFieldMaskCodec.Encode({schemaVersion}, mask, field => field switch {{ {encoders}, _ => throw new global::System.ArgumentOutOfRangeException(nameof(field)) }});");
+                members.AppendLine($"    /// <summary>Applies generated property payloads after validating schema and dirty-mask framing.</summary>");
+                members.AppendLine($"    public void ApplyGeneratedFields(global::System.ReadOnlySpan<byte> data, int maximumFieldBytes = 1048576)");
+                members.AppendLine("    {");
+                members.AppendLine("        var decoded = DecodeGeneratedFields(data, maximumFieldBytes);");
+                members.AppendLine("        foreach (var field in decoded.Fields)");
+                members.AppendLine("        {");
+                members.AppendLine("            switch (field.Key)");
+                members.AppendLine("            {");
+                foreach (PropertyDeclarationSyntax field in fields)
+                {
+                    bool writable = field.AccessorList?.Accessors.Any(accessor => accessor.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SetAccessorDeclaration)) == true;
+                    if (writable)
+                    {
+                        members.AppendLine($"                case {Array.IndexOf(fields, field)}: this.{field.Identifier.Text} = global::MemoryPack.MemoryPackSerializer.Deserialize<{field.Type}>(field.Value)!; break;");
+                    }
+                }
+                members.AppendLine("                default: throw new global::System.IO.InvalidDataException(\"Generated field is not writable or is outside the schema.\");");
+                members.AppendLine("            }");
+                members.AppendLine("        }");
+                members.AppendLine("    }");
             }
             if (rpc)
             {
