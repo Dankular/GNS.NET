@@ -136,7 +136,7 @@ jobs:
     - name: Fetch GameNetworkingSockets
       run: if [ ! -d native/GameNetworkingSockets/.git ]; then git clone --depth 1 --branch "$GNS_REF" https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets; fi
     - name: Install native dependencies
-      run: vcpkg install --triplet x64-linux
+      run: timeout --foreground 30m vcpkg install --triplet x64-linux --debug
       working-directory: native/GameNetworkingSockets
     - name: Configure native transport
       run: cmake -S native/GameNetworkingSockets -B native/build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
@@ -179,7 +179,13 @@ jobs:
       run: if (-not (Test-Path native/GameNetworkingSockets/.git)) { git clone --depth 1 --branch $env:GNS_REF https://github.com/ValveSoftware/GameNetworkingSockets.git native/GameNetworkingSockets }
     - name: Install native dependencies
       shell: pwsh
-      run: vcpkg install --triplet x64-windows
+      run: |
+        $process = Start-Process -FilePath vcpkg -ArgumentList @("install", "--triplet", "x64-windows", "--debug") -WorkingDirectory (Get-Location) -NoNewWindow -PassThru
+        if (-not $process.WaitForExit(30 * 60 * 1000)) {
+          $process.Kill($true)
+          throw "vcpkg dependency installation exceeded 30 minutes"
+        }
+        if ($process.ExitCode -ne 0) { throw "vcpkg dependency installation failed with exit code $($process.ExitCode)" }
       working-directory: native/GameNetworkingSockets
     - name: Configure native transport
       shell: pwsh
