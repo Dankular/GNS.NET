@@ -251,10 +251,14 @@ public sealed class HitboxRewindHistory
     public IReadOnlyList<RewindHit> RaycastSubTick(double tick, float originX, float originY, float directionX, float directionY, float maxDistance)
     {
         if (double.IsNaN(tick) || tick < 0 || tick > uint.MaxValue) return [];
-        uint lower = (uint)Math.Floor(tick); uint upper = (uint)Math.Ceiling(tick);
-        (uint Tick, RewindHitbox[] Hitboxes) first = this.frames.OrderBy(x => Math.Abs((long)x.Tick - lower)).FirstOrDefault();
-        (uint Tick, RewindHitbox[] Hitboxes) second = this.frames.OrderBy(x => Math.Abs((long)x.Tick - upper)).FirstOrDefault();
-        if (first.Hitboxes is null || second.Hitboxes is null || first.Tick == second.Tick) return this.Raycast(first.Tick, originX, originY, directionX, directionY, maxDistance);
+        uint lower = (uint)Math.Floor(tick);
+        (uint Tick, RewindHitbox[] Hitboxes)[] ordered = this.frames.OrderBy(x => x.Tick).ToArray();
+        if (ordered.Length == 0) return [];
+        (uint Tick, RewindHitbox[] Hitboxes) first = ordered.LastOrDefault(x => x.Tick <= tick);
+        (uint Tick, RewindHitbox[] Hitboxes) second = ordered.FirstOrDefault(x => x.Tick >= tick);
+        if (first.Hitboxes is null) first = ordered[0];
+        if (second.Hitboxes is null) second = ordered[^1];
+        if (first.Tick == second.Tick) return this.Raycast(first.Tick, originX, originY, directionX, directionY, maxDistance);
         double amount = Math.Clamp((tick - first.Tick) / (second.Tick - first.Tick), 0, 1); var byId = second.Hitboxes.ToDictionary(x => x.EntityId);
         var blended = new List<RewindHitbox>(); foreach (RewindHitbox box in first.Hitboxes) if (byId.TryGetValue(box.EntityId, out RewindHitbox next)) blended.Add(new(box.EntityId, (float)(box.X + (next.X - box.X) * amount), (float)(box.Y + (next.Y - box.Y) * amount), (float)(box.Radius + (next.Radius - box.Radius) * amount)));
         var temporary = new HitboxRewindHistory(2); temporary.Record(0, blended); return temporary.Raycast(0, originX, originY, directionX, directionY, maxDistance).Select(x => x with { Tick = lower }).ToArray();

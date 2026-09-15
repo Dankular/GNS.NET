@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>GnsNet.ReplicationManifest</AssemblyName>
+    <RootNamespace>GnsNet.ReplicationManifest</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/GnsNet/GnsNet.csproj" />
+  </ItemGroup>
+</Project>

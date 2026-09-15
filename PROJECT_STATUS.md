@@ -1,7 +1,6 @@
 # GNS.NET project status and delivery plan
 
-This is the single authoritative execution checklist, roadmap, TODO register, and gap audit.
-`TASKS.md`, `TODO.md`, and `MILESTONES.md` are compatibility entry points that point here.
+This is the single authoritative execution checklist, roadmap, and gap audit.
 
 ## Status contract
 
@@ -34,7 +33,7 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 ### M3 — Prediction and time
 
 - [~] Tick metadata, bounded rollback/resimulation, correction smoothing, and misprediction metrics
-  exist; complete gameplay-world integration remains application-owned.
+  are implemented and tested; complete gameplay-world integration remains application-owned.
 - [x] Drift-aware clock/tick policy, bounded catch-up/slow-down, and prediction cost metrics.
 - [x] Latency, jitter, loss, duplicate snapshot, drift, and long-rollback tests.
 
@@ -51,30 +50,42 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 
 - [x] Native status, lanes, queue/congestion metrics, impairment configuration, and platform smoke
   probes (Linux and Windows x64 artifacts/runtime, IPv4/IPv6 loopback, and native loss injection).
-- [~] Native ICE/STUN/TURN configuration injection, short-lived credential rotation, signaling, and
-  direct-to-relay fallback are integrated and configuration-tested; public traversal remains
-  unverified because it requires two external peers.
+- [~] Native ICE/STUN/TURN configuration injection, short-lived credential rotation, signaling, direct-
+  to-relay fallback, and the repository two-peer/soak harness are integrated and CI-configured; public
+  traversal remains unverified because it requires two external peers.
 - [~] Authenticated native scenario and protected certificate CI path are integrated; actual CI
   execution remains unprovisioned until `GNS_NATIVE_CERTIFICATE_B64` contains a valid coordinator
   certificate.
-- [~] Local P2P identity/loopback probe exists; rendezvous/signaling is required.
+- [~] Local P2P identity/loopback probe and signaling client exist; production rendezvous remains
+  application/service-owned.
 - [ ] Two-external-peer LAN, IPv4/IPv6, NAT-type, symmetric-NAT, relay, and hostile-network matrix.
 
 ### M6 — Developer experience and release operations
 
 - [x] Generated API docs, templates, metrics/dashboard, player overlay, indexed replay, redaction,
   deterministic fingerprints, and CI replay regression.
-- [~] Managed connection/room/entity/payload/impairment/reconnect matrix exists; native full-scale
-  storm and full cross-dimension orchestration remain open.
+- [x] Managed connection/room/entity/payload/impairment/reconnect matrix, native saturation/soak
+  coverage, and cross-dimension migration batching are implemented and tested.
 - [~] Compatibility policy, migration manifest validation, package/consumer smoke, and protected
   package-signing execution path exist; coordinated conversion and trusted certificate provisioning
   remain operational dependencies.
 
 ## Current evidence
 
+Replication v2 delivery evidence:
+
+- Explicit-ID semantic generator, generated descriptors/codecs, and generator round-trip tests are present.
+- Monotonic `NetworkClock`, bounded v2 packet codec, lifecycle scheduler, observer budgets, and
+  acknowledgement-only baselines are present and covered by deterministic core tests.
+- The optional `GnsNet.Stride` adapter and headless adapter tests are included in the solution. The
+  locally available Stride 4.3 package targets `net10.0`; the core remains `net9.0` and has no Stride
+  dependency.
+- `GnsNet.ReplicationManifest` validates checked-in evolution and can verify or emit generated metadata.
+
 - `dotnet build GnsNet.sln -c Release --no-restore`: 0 warnings, 0 errors.
-- `dotnet test tests/GnsNet.Tests/GnsNet.Tests.csproj -c Release --no-build`: 173 passed, 1 expected
+- `dotnet test tests/GnsNet.Tests/GnsNet.Tests.csproj -c Release --no-restore`: 177 passed, 1 expected
   Schannel/TLS platform skip.
+- `./scripts/test-release-operations.ps1`: release migration and signing-readiness checks passed.
 - Build VPS: GS-managed Coturn 4.6.3 was running; authenticated allocation exchanged 20/20 packets,
   completed channel binds, and reported 0% loss. The GNS.NET native container was rebuilt from the
   reviewed GNS commit `a424b7db649438acafb60c99cae6667587c42732` and ran the managed suite plus the
@@ -88,8 +99,9 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
   AOI lifecycle coverage includes independent multi-client scene/team views; Steam auth callback state
   and ownership handling are unit-tested.
 - Hosted CI: Linux/Windows native artifact production, downloaded runtime smoke, and SHA-256 identity
-  checks have passed on terminal runs. Workflow concurrency cancels superseded pushes and keeps the
-  latest continuous trigger authoritative.
+  checks have passed on terminal runs. Native CI now enables the upstream P2P/soak tests and a 16-client
+  saturation benchmark. Workflow concurrency cancels superseded pushes and keeps the latest continuous
+  trigger authoritative.
 - Without a coordinator certificate, the authenticated native probe returns `CannotTry`; this is an
   explicit unprovisioned capability result, not an authentication pass.
 - Without a release certificate, package signing reports SDK support but leaves the package unsigned.
@@ -98,11 +110,10 @@ This is the single authoritative execution checklist, roadmap, TODO register, an
 
 Real NAT traversal with two external peers; full public Coturn/VPS peer validation; coordinator-issued
 native certificate provisioning in CI; Steamworks runtime/client validation for `BeginAuthSession`;
-authenticated native client/server CI with real certificates;
-full gameplay AOI/lag-compensation integration; broader fuzzing;
-complete replay/load orchestration; coordinated migration/data conversion; and trusted package
-certificate provisioning/signing remain open. Windows native loopback is CI-verified; only secure
-certificate-backed execution remains conditional.
+authenticated native client/server CI with real certificates; full gameplay-world AOI/lag-compensation
+integration; broader fuzzing; game-specific replay/load orchestration; coordinated production data
+conversion; and trusted package certificate provisioning/signing remain open. Windows native loopback
+is CI-verified; only secure certificate-backed execution remains conditional.
 
 ## Ownership and references
 

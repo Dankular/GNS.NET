@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>13</LangVersion>
+    <!-- Central pin for the isolated Stride adapter/sample projects. Core remains engine-free. -->
+    <StrideVersion>4.3.0.2507</StrideVersion>
   </PropertyGroup>
 
 </Project>

@@ -63,6 +63,18 @@ public sealed class ShardProcessCoordinator<TShardId, TPlayerId> where TShardId 
     public async Task<bool> MigrateAsync(TPlayerId player, TShardId target, CancellationToken cancellationToken = default)
     { if (!this.lifecycle.TryGetPlayerShard(player, out TShardId source) || !this.lifecycle.IsAvailable(target)) return false; byte[] state = this.transfer is null ? [] : await this.transfer.ExportAsync(player, source, cancellationToken); bool acknowledged = this.controller is IShardMigrationAcknowledgement<TShardId> protocol ? await protocol.MigrateAndWaitAsync(player, source, target, cancellationToken) : await this.MigrateLegacyAsync(player, source, target, cancellationToken); if (!acknowledged) return false; if (!this.lifecycle.Migrate(player, target)) return false; if (this.transfer is not null) await this.transfer.ImportAsync(player, target, state, cancellationToken); return true; }
     private async Task<bool> MigrateLegacyAsync(TPlayerId player, TShardId source, TShardId target, CancellationToken cancellationToken) { await this.controller.MigrateAsync(player, source, target, cancellationToken); return true; }
+    /// <summary>Runs a deterministic migration batch across shard/dimension boundaries.</summary>
+    public async Task<int> MigrateManyAsync(IEnumerable<(TPlayerId Player, TShardId Target)> migrations, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(migrations);
+        int migrated = 0;
+        foreach (var migration in migrations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await this.MigrateAsync(migration.Player, migration.Target, cancellationToken).ConfigureAwait(false)) migrated++;
+        }
+        return migrated;
+    }
     public async Task StopAsync(TShardId shard, CancellationToken cancellationToken = default) { this.lifecycle.SetDraining(shard, true); await this.controller.StopAsync(shard, cancellationToken); }
     public async Task<bool> RecoverAsync(TShardId shard, CancellationToken cancellationToken = default)
     {

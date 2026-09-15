@@ -19,6 +19,9 @@ jobs:
       - name: Run package and clean-consumer smoke test
         shell: pwsh
         run: ./scripts/release-smoke.ps1
+      - name: Validate release operations tooling
+        shell: pwsh
+        run: ./scripts/test-release-operations.ps1
       - name: Upload release smoke package
         uses: actions/upload-artifact@v4
         with:

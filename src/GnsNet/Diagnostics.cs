@@ -185,7 +185,7 @@ public sealed class NetworkRecorder
     {
         if (speed <= 0 || double.IsNaN(speed)) throw new ArgumentOutOfRangeException(nameof(speed));
         DateTimeOffset? previous = null;
-        RecordedPacket[] snapshot; lock (this.sync) snapshot = this.packets.ToArray();
+        RecordedPacket[] snapshot; lock (this.sync) snapshot = this.packets.Select((packet, index) => (packet, index)).OrderBy(x => x.packet.Time).ThenBy(x => x.index).Select(x => x.packet).ToArray();
         foreach (RecordedPacket packet in snapshot)
         {
             if (previous is not null) await Task.Delay(TimeSpan.FromTicks((long)Math.Max(0, (packet.Time - previous.Value).Ticks / speed)), cancellationToken).ConfigureAwait(false);

@@ -17,6 +17,27 @@ Recommended migration sequence:
 
 Every breaking release should add a protocol negotiation test and a release smoke test for the migration path.
 
+## Replication v2 manifest validation
+
+Replication v2 uses explicit component and field IDs. The checked-in manifest records schema versions,
+wire types, optionality, and reserved IDs. Validate evolution before rollout:
+
+```powershell
+dotnet run --project tools/GnsNet.ReplicationManifest -c Release -- validate `
+  --baseline .\current-replication-manifest.json `
+  --candidate .\candidate-replication-manifest.json
+```
+
+The validator rejects duplicate identities, active/reserved collisions, deletion without reservation,
+identity renames, schema regressions, and required field additions or wire-type changes without a schema
+increment. The `verify` command compares a manifest to generated descriptors, while `emit` produces a
+canonical manifest-shaped document from loaded assemblies. The validator is tooling-only and is not used
+on the packet hot path.
+
+The canonical v2 envelope remains inside the existing `NetFrame` outer framing. It uses bounded big-endian
+packet metadata and length-delimited records; reliable lifecycle records and unreliable sequenced state
+records are selected by the scheduler, while baselines advance only after application acknowledgements.
+
 ## Release smoke test
 
 Run the clean-consumer check from the repository root before publishing:

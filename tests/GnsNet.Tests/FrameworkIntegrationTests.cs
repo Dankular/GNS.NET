@@ -417,6 +417,19 @@ public sealed class FrameworkIntegrationTests
     }
 
     [Fact]
+    public async Task ShardCoordinator_MigratesPlayersAcrossDimensionsInInputOrder()
+    {
+        var controller = new FakeController(); var lifecycle = new ShardLifecycle<string, string>(TimeSpan.FromMinutes(1));
+        lifecycle.Register("overworld"); lifecycle.Register("dungeon"); lifecycle.Register("arena");
+        lifecycle.Assign("one", "overworld"); lifecycle.Assign("two", "dungeon");
+        var coordinator = new ShardProcessCoordinator<string, string>(controller, lifecycle);
+        Assert.Equal(2, await coordinator.MigrateManyAsync(new[] { ("one", "dungeon"), ("two", "arena") }));
+        Assert.True(lifecycle.TryGetPlayerShard("one", out var one) && one == "dungeon");
+        Assert.True(lifecycle.TryGetPlayerShard("two", out var two) && two == "arena");
+        Assert.Equal(2, controller.Migrations);
+    }
+
+    [Fact]
     public async Task ShardSupervisor_RestartsDeadShard()
     {
         var controller = new FakeController(); var lifecycle = new ShardLifecycle<string, string>(TimeSpan.FromMinutes(1)); lifecycle.Register("a");

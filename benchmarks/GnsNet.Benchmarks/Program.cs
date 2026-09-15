@@ -205,9 +205,11 @@ async Task RunP2P(BenchmarkOptions options)
 static void RunSaturation(BenchmarkOptions options)
 {
     var points = new List<SaturationPoint>();
-    foreach (int burst in new[] { 1, 2, 4, 8, 16, 32 })
+    byte[]? certificate = options.NativeCertificatePath is null ? null : File.ReadAllBytes(options.NativeCertificatePath);
+    using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath ?? "/opt/gns/lib/libGameNetworkingSockets.so", NativeCertificate = certificate, RequireNativeAuthentication = false, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
+    foreach ((int burst, int port) in new[] { (1, 27991), (2, 27992), (4, 27993), (8, 27994), (16, 27995), (32, 27996) })
     {
-        TransportResult result = BenchmarkTransport(options with { Iterations = Math.Min(options.Iterations, 500), NativePath = options.NativePath ?? "/opt/gns/lib/libGameNetworkingSockets.so" }, burst);
+        TransportResult result = BenchmarkTransport(options with { Address = WithPort(options.Address, port), Iterations = Math.Min(options.Iterations, 500), NativePath = options.NativePath ?? "/opt/gns/lib/libGameNetworkingSockets.so" }, burst, port, sharedRuntime: runtime);
         long offered = (long)options.Clients * burst * Math.Max(1, options.PayloadBytes);
         points.Add(new(burst, result.Messages, result.Messages / result.Elapsed.TotalSeconds, result.Loss, result.P50.TotalMilliseconds, result.P99.TotalMilliseconds, offered));
         Console.WriteLine($"Saturation burst={burst}: {result.Messages:N0} echoed | {result.Messages / result.Elapsed.TotalSeconds:N0} msg/s | offered={offered / 1024d:N1} KiB/tick | RTT p50={result.P50.TotalMilliseconds:N2} ms p99={result.P99.TotalMilliseconds:N2} ms | loss={result.Loss:P2}");
@@ -220,6 +222,18 @@ static void RunSaturation(BenchmarkOptions options)
         File.WriteAllText(graphPath, SaturationGraph(points));
         Console.WriteLine($"Saturation JSON: {options.JsonPath}"); Console.WriteLine($"Saturation graph: {graphPath}");
     }
+}
+
+static string WithPort(string address, int port)
+{
+    if (address.StartsWith("[", StringComparison.Ordinal))
+    {
+        int end = address.IndexOf(']');
+        if (end < 0) throw new ArgumentException("IPv6 address must include a closing bracket.", nameof(address));
+        return address[..(end + 1)] + ":" + port;
+    }
+    int separator = address.LastIndexOf(':');
+    return separator < 0 ? $"{address}:{port}" : address[..separator] + ":" + port;
 }
 
 static string SaturationGraph(IReadOnlyList<SaturationPoint> points)
@@ -248,12 +262,12 @@ static async Task RunPlayFab(BenchmarkOptions options)
     Console.WriteLine($"PlayFab end-to-end: registered account={account.PlayFabId}, server entity={server.Entity.Id}, lobby={joined.LobbyId}, elapsed={timer.Elapsed.TotalSeconds:N2}s");
 }
 
-static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst, bool authenticated = false)
+static TransportResult BenchmarkTransport(BenchmarkOptions options, int burst, int port = 27991, bool authenticated = false, GnsRuntime? sharedRuntime = null)
 {
     if (!authenticated && !options.Insecure) throw new InvalidOperationException("Native authentication is not configured for this loopback harness. Pass --insecure explicitly for development-only transport coverage.");
     byte[]? certificate = options.NativeCertificatePath is null ? null : File.ReadAllBytes(options.NativeCertificatePath);
-    using GnsRuntime runtime = GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, NativeCertificate = certificate, RequireNativeAuthentication = authenticated, Impairment = options.NativeLossPercent == 0 ? null : new GnsImpairmentOptions { LossSendPercent = options.NativeLossPercent, LossReceivePercent = options.NativeLossPercent }, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") });
-    using GnsServer server = GnsServer.Listen("[::]:27991", Math.Max(64, options.Clients * 2));
+    using GnsRuntime? ownedRuntime = sharedRuntime is null ? GnsRuntime.Initialize(new GnsRuntimeOptions { NativeLibraryPath = options.NativePath, NativeCertificate = certificate, RequireNativeAuthentication = authenticated, Impairment = options.NativeLossPercent == 0 ? null : new GnsImpairmentOptions { LossSendPercent = options.NativeLossPercent, LossReceivePercent = options.NativeLossPercent }, DebugOutput = (level, message) => Console.Error.WriteLine($"[GNS {level}] {message}") }) : null;
+    using GnsServer server = GnsServer.Listen($"[::]:{port}", Math.Max(64, options.Clients * 2));
     server.SecurityPolicy = new TransportSecurityPolicy { RequireAuthenticated = authenticated, RequireEncrypted = authenticated };
     var clients = new List<GnsClient>(options.Clients);
     var connected = new CountdownEvent(options.Clients);

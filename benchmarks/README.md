@@ -8,6 +8,12 @@ dotnet run --project benchmarks/GnsNet.Benchmarks -c Release -- --scenario all -
 
 Scenarios are `serialize`, `stress`, `batch`, `pipeline`, `prediction`, `replay`, `matrix`, `transport`, `authenticated-transport`, `p2p`, `native-matrix`, and `playfab`. `stress` runs concurrent client serialization with `--parallelism` worker limits, useful for finding allocation and contention problems. Adjust `--clients`, `--entities`, `--iterations`, `--payload-bytes`, and `--parallelism` to model a target workload. Use Release builds for comparisons and repeat runs on an otherwise idle machine.
 
+Replication-specific generated-code and clock microbenchmarks should record the runtime, OS, CPU,
+configuration, entity/component mix, dirty percentage, and payload distribution alongside results. The
+current harness's `matrix` and `native-matrix` scenarios provide managed/native scheduling and transport
+profiles; they do not claim the full 1,000-entity/100-observer production target until measured on the
+deployment hardware.
+
 The `playfab` scenario uses one persistent account from `.env`/environment credentials and performs a live adapter smoke test: login, obtain the Entity Session Token, register a game-server entity, create a server-owned Lobby, and join it as the client. It never creates an account during normal runs and never prints credentials. Set `PLAYFAB_TEST_EMAIL`, `PLAYFAB_TEST_USERNAME`, and `PLAYFAB_TEST_PASSWORD` once. To explicitly provision that account the first time, add `--register-test-account` for one run, then omit it afterward:
 
 ```powershell

@@ -137,7 +137,7 @@ jobs:
           native/GameNetworkingSockets
         key: gns-native-linux-${{ env.GNS_REF }}-${{ hashFiles('.github/workflows/dotnet.yml') }}
     - name: Install native build tools
-      run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev protobuf-compiler
+      run: sudo apt-get update && sudo apt-get install -y ninja-build python3 libssl-dev protobuf-compiler
     - name: Fetch GameNetworkingSockets
       shell: bash
       run: |
@@ -150,10 +150,18 @@ jobs:
     - name: Install native dependencies
       run: timeout --foreground 30m vcpkg install --triplet x64-linux --debug
       working-directory: native/GameNetworkingSockets
-    - name: Configure native transport
-      run: cmake -S native/GameNetworkingSockets -B native/build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DGNS_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
+    - name: Configure native transport and test harness
+      run: cmake -S native/GameNetworkingSockets -B native/build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
     - name: Build native transport
       run: cmake --build native/build-linux --config Release --parallel
+    - name: Run native two-peer ICE and soak harness
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 native/build-linux/test_p2p.py --setup-mock-ips
+        cleanup() { python3 native/build-linux/test_p2p.py --cleanup-mock-ips || true; }
+        trap cleanup EXIT
+        ctest --test-dir native/build-linux --output-on-failure -R '^(p2p|connection_soak)$'
     - name: Validate and fingerprint Linux artifact
       shell: bash
       run: |
@@ -356,6 +364,7 @@ jobs:
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address '[::1]:27991' --clients 2 --iterations 100 --payload-bytes 64 --deterministic --json artifacts/linux-transport-ipv6.json
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario transport --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 2 --iterations 100 --payload-bytes 64 --native-loss-percent 10 --deterministic --json artifacts/linux-transport-loss.json
         dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario native-matrix --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 4 --iterations 20 --payload-bytes 64 --deterministic --json artifacts/linux-native-matrix.json
+        dotnet run --project benchmarks/GnsNet.Benchmarks -c Release --no-build -- --scenario saturation --insecure --native-path "$artifact" --address 127.0.0.1:27991 --clients 16 --iterations 200 --payload-bytes 128 --deterministic --json artifacts/linux-native-storm.json
     - name: Upload Linux runtime smoke result
       uses: actions/upload-artifact@v4
       with:
@@ -363,6 +372,7 @@ jobs:
         path: |
           artifacts/linux-transport-*.json
           artifacts/linux-native-matrix.json
+          artifacts/linux-native-storm.json
         if-no-files-found: error
 
   native-artifact-consumer:

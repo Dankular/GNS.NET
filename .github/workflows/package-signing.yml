@@ -64,7 +64,7 @@ jobs:
           NUGET_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.NUGET_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           $package = (Get-ChildItem artifacts/package/GnsNet.*.nupkg | Select-Object -First 1).FullName
-          ./scripts/sign-package.ps1 -PackagePath $package -CertificatePath (Resolve-Path artifacts/signing.pfx).Path -CertificatePassword $env:NUGET_SIGNING_CERTIFICATE_PASSWORD
+          ./scripts/sign-package.ps1 -PackagePath $package -CertificatePath (Resolve-Path artifacts/signing.pfx).Path -CertificatePassword $env:NUGET_SIGNING_CERTIFICATE_PASSWORD -RequireCertificate
           dotnet nuget verify --all $package
       - name: Record unprovisioned trusted-signing capability
         if: steps.certificate.outputs.configured != 'true'

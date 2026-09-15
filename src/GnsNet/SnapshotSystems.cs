@@ -16,12 +16,21 @@ public sealed class SnapshotBuffer<T>
         while (this.snapshots.Count > this.capacity) this.snapshots.RemoveFirst();
     }
     public bool TrySample(uint renderTick, Func<T, T, float, T> interpolate, out T state)
+        => this.TrySample((double)renderTick, interpolate, out state);
+
+    /// <summary>Samples a fractional render tick, including across the <see cref="uint"/> tick wrap boundary.</summary>
+    public bool TrySample(double renderTick, Func<T, T, float, T> interpolate, out T state)
     {
+        if (!double.IsFinite(renderTick)) { state = default!; return false; }
+        uint discreteRenderTick = unchecked((uint)Math.Floor(renderTick));
         var node = this.snapshots.First;
-        while (node?.Next is not null && TickSequence.IsNewer(node.Next.Value.Tick, renderTick)) node = node.Next;
+        while (node?.Next is not null && TickSequence.IsNewer(node.Next.Value.Tick, discreteRenderTick)) node = node.Next;
         if (node is null || node.Next is null) { state = default!; return false; }
-        uint span = node.Next.Value.Tick - node.Value.Tick;
-        float amount = span == 0 ? 1f : Math.Clamp((float)(renderTick - node.Value.Tick) / span, 0f, 1f);
+        uint span = unchecked(node.Next.Value.Tick - node.Value.Tick);
+        double normalizedRender = renderTick;
+        while (normalizedRender < node.Value.Tick - 2_147_483_648d) normalizedRender += 4_294_967_296d;
+        while (normalizedRender > node.Value.Tick + 2_147_483_648d) normalizedRender -= 4_294_967_296d;
+        float amount = span == 0 ? 1f : Math.Clamp((float)((normalizedRender - node.Value.Tick) / span), 0f, 1f);
         state = interpolate(node.Value.State, node.Next.Value.State, amount);
         return true;
     }

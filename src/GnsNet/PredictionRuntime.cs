@@ -94,7 +94,7 @@ public readonly record struct RollbackResult<TState>(TState State, bool Correcte
 /// <summary>Composes prediction history, authoritative reconciliation, and render correction for one world.</summary>
 public sealed class PredictedWorldRuntime<TInput, TState>
 {
-    private readonly Func<TState, TInput, TState> simulate;
+    private readonly Func<TState, TInput, PredictionTickMetadata, TState> simulate;
     private readonly Func<TState, TState, float, TState> interpolate;
     private readonly RollbackBuffer<TInput, TState> history;
     private TState authoritativeState;
@@ -104,6 +104,10 @@ public sealed class PredictedWorldRuntime<TInput, TState>
     public PredictionTickMetadata PredictionMetadata { get; }
     public IReadOnlyList<PredictionTickMetadata> LastReplayedMetadata => this.history.LastReplayedMetadata;
     public PredictedWorldRuntime(TState initialState, Func<TState, TInput, TState> simulate, Func<TState, TState, float, TState> interpolate, int historyCapacity = 256, int maxResimulationTicks = 128, PredictionTickMetadata? predictionMetadata = null)
+        : this(initialState, (state, input, _) => simulate(state, input), interpolate, historyCapacity, maxResimulationTicks, predictionMetadata)
+    {
+    }
+    public PredictedWorldRuntime(TState initialState, Func<TState, TInput, PredictionTickMetadata, TState> simulate, Func<TState, TState, float, TState> interpolate, int historyCapacity = 256, int maxResimulationTicks = 128, PredictionTickMetadata? predictionMetadata = null)
     {
         this.authoritativeState = this.PredictedState = this.RenderedState = initialState;
         this.simulate = simulate ?? throw new ArgumentNullException(nameof(simulate)); this.interpolate = interpolate ?? throw new ArgumentNullException(nameof(interpolate));
@@ -111,7 +115,7 @@ public sealed class PredictedWorldRuntime<TInput, TState>
         this.PredictionMetadata = predictionMetadata ?? PredictionTickMetadata.Default;
     }
     public void Predict(uint tick, TInput input) => this.Predict(tick, input, this.PredictionMetadata);
-    public void Predict(uint tick, TInput input, PredictionTickMetadata metadata) { this.PredictedState = this.simulate(this.PredictedState, input); this.history.Record(tick, input, this.PredictedState, metadata); this.RenderedState = this.PredictedState; }
+    public void Predict(uint tick, TInput input, PredictionTickMetadata metadata) { this.PredictedState = this.simulate(this.PredictedState, input, metadata); this.history.Record(tick, input, this.PredictedState, metadata); this.RenderedState = this.PredictedState; }
     public RollbackResult<TState> Reconcile(uint authoritativeTick, TState authoritativeState, int smoothingFrames = 6)
     {
         this.authoritativeState = authoritativeState; this.LastReconciliation = this.history.ReconcileDetailed(authoritativeTick, authoritativeState, this.simulate); this.PredictedState = this.LastReconciliation.State;

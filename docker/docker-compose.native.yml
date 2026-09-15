@@ -7,5 +7,7 @@ services:
         GNS_REF: ${GNS_REF:-a424b7db649438acafb60c99cae6667587c42732}
     environment:
       LD_LIBRARY_PATH: /opt/gns/lib
+    cap_add:
+      - NET_ADMIN
     volumes:
       - ../artifacts:/workspace/artifacts

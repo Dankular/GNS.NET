@@ -192,8 +192,7 @@ conversion tooling; and trusted package certificate provisioning/signing in CI. 
 explicitly so a successful managed build is not mistaken for completion of those external systems.
 
 The authoritative execution checklist and precise external limitations are consolidated in
-[PROJECT_STATUS.md](PROJECT_STATUS.md); the legacy [TASKS.md](TASKS.md), [TODO.md](TODO.md), and
-[MILESTONES.md](MILESTONES.md) files point to it. The project is
+[PROJECT_STATUS.md](PROJECT_STATUS.md). The project is
 ready for real game integration, but these open boundaries prevent a claim of public-Internet
 production readiness.
 
@@ -210,6 +209,12 @@ production readiness.
 | `NativeLibraryLoader` | Resolves and loads the native `GameNetworkingSockets` shared library (explicit path, `GNSNET_NATIVE_LIBRARY_PATH` env var, or platform default next to the executable). |
 | `GnsServerHost` / `GnsClientHost` | Integrated framework hosts for authentication, heartbeats, reconnect/session grace, typed routing, batching, metrics, replay, and channel policy. |
 | `SnapshotPipeline` | Automatic AOI culling, acknowledged delta baselines, relevance priority, batching, and state/event channels. |
+| `ReplicationWorld` / `ComponentSnapshotScheduler` | Engine-independent component storage, lifecycle ordering, per-observer budgets, v2 packets, and acknowledgement-based baselines. |
+| `NetworkClock` | Monotonic NTP-style clock discipline with acquisition, holdover, drift, adaptive interpolation, and bounded catch-up timelines. |
+| `GnsNet.Stride` | Optional Stride presentation adapter for update-thread view ownership, prefab resolution, transform interpolation, prediction presentation, and diagnostics. |
+| `ReplicationWorld` / `ComponentSnapshotScheduler` | Engine-independent component storage, lifecycle ordering, per-observer budgets, v2 packets, and acknowledgement-based baselines. |
+| `NetworkClock` | Monotonic NTP-style clock discipline with acquisition, holdover, drift, adaptive interpolation, and bounded catch-up timelines. |
+| `GnsNet.Stride` | Optional Stride presentation adapter for update-thread view ownership, prefab resolution, transform interpolation, prediction presentation, and diagnostics. |
 | `LifecycleReplicationScheduler` | Automatic observer enter/leave lifecycle delivery for authoritative spawn, despawn, and ownership records. |
 | `ReliableBackendBus` / `TcpBackendMessageBus` | Authenticated, ordered, retrying server-to-server transport. |
 | `NetworkDebugOverlay` | Renderer-neutral per-connection RTT, loss, packet, and byte diagnostics for in-game overlays. |
@@ -779,6 +784,10 @@ foreach (ReceivedMessage msg in client.Poll()) { /* ... */ }
 ```
 src/GnsNet/            The wrapper library.
 src/GnsNet.Generators/ Source generators for schema and replication metadata.
+src/GnsNet.Stride/    Optional Stride 4.3 presentation adapter (net10.0; core remains net9.0/engine-free).
+tools/GnsNet.ReplicationManifest/  Manifest validation, generated-metadata verification, and manifest emission CLI.
+src/GnsNet.Stride/    Optional Stride 4.3 presentation adapter (net10.0; core remains net9.0/engine-free).
+tools/GnsNet.ReplicationManifest/  Manifest validation, generated-metadata verification, and manifest emission CLI.
 samples/Poc/           The original POC, rebuilt on top of GnsNet - a server, a client, and
                         their shared protocol/message definitions.
 tests/GnsNet.Tests/    Managed unit and integration tests for framing, lifecycle, prediction,
@@ -797,6 +806,68 @@ dotnet restore
 dotnet build GnsNet.sln -c Release --no-restore
 dotnet test GnsNet.sln -c Release --no-build
 ```
+
+The new replication authoring path uses explicit IDs and generated codecs:
+
+```csharp
+[ReplicatedComponent(1, SchemaVersion = 1)]
+public partial struct TransformState
+{
+    [ReplicatedField(1, Quantize = 0.01f)] public Vector3 Position { get; set; }
+    [ReplicatedField(2, Interpolation = InterpolationMode.Spherical)] public Quaternion Rotation { get; set; }
+}
+```
+
+The generator emits deterministic descriptors and full/delta codecs. IDs are never derived from
+source order or hashes. Validate a checked-in manifest and compare it with generated descriptors:
+
+```powershell
+dotnet run --project tools/GnsNet.ReplicationManifest -c Release -- validate --baseline docs/replication-manifest.v2.json --candidate docs/replication-manifest.v2.json
+dotnet run --project tools/GnsNet.ReplicationManifest -c Release -- emit --assembly tests/GnsNet.Tests/bin/Release/net9.0/GnsNet.Tests.dll
+```
+
+The optional Stride adapter is validated independently because the available Stride 4.3 packages
+target `net10.0`:
+
+```powershell
+dotnet build src/GnsNet.Stride/GnsNet.Stride.csproj -c Release
+dotnet test tests/GnsNet.Stride.Tests/GnsNet.Stride.Tests.csproj -c Release
+```
+
+See [ADR-0001](docs/ADR-0001-explicit-replication-identities.md),
+[ADR-0002](docs/ADR-0002-monotonic-network-clock.md), and
+[replication-manifest.v2.json](docs/replication-manifest.v2.json) for the wire and clock decisions.
+
+The new replication authoring path uses explicit IDs and generated codecs:
+
+```csharp
+[ReplicatedComponent(1, SchemaVersion = 1)]
+public partial struct TransformState
+{
+    [ReplicatedField(1, Quantize = 0.01f)] public Vector3 Position { get; set; }
+    [ReplicatedField(2, Interpolation = InterpolationMode.Spherical)] public Quaternion Rotation { get; set; }
+}
+```
+
+The generator emits deterministic descriptors and full/delta codecs. IDs are never derived from
+source order or hashes. Validate a checked-in manifest and compare it with generated descriptors:
+
+```powershell
+dotnet run --project tools/GnsNet.ReplicationManifest -c Release -- validate --baseline docs/replication-manifest.v2.json --candidate docs/replication-manifest.v2.json
+dotnet run --project tools/GnsNet.ReplicationManifest -c Release -- emit --assembly tests/GnsNet.Tests/bin/Release/net9.0/GnsNet.Tests.dll
+```
+
+The optional Stride adapter is validated independently because the available Stride 4.3 packages
+target `net10.0`:
+
+```powershell
+dotnet build src/GnsNet.Stride/GnsNet.Stride.csproj -c Release
+dotnet test tests/GnsNet.Stride.Tests/GnsNet.Stride.Tests.csproj -c Release
+```
+
+See [ADR-0001](docs/ADR-0001-explicit-replication-identities.md),
+[ADR-0002](docs/ADR-0002-monotonic-network-clock.md), and
+[replication-manifest.v2.json](docs/replication-manifest.v2.json) for the wire and clock decisions.
 
 The benchmark tool can emit CI-friendly JSON alongside its human-readable score:
 

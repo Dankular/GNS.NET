@@ -401,6 +401,20 @@ public sealed class ConnectionPolicyTests
     }
 
     [Fact]
+    public async Task Recorder_PlaybackOrdersCapturedPacketsDeterministically()
+    {
+        var recorder = new NetworkRecorder();
+        DateTimeOffset origin = DateTimeOffset.UnixEpoch;
+        recorder.Record(false, [2], origin.AddSeconds(2));
+        recorder.Record(false, [1], origin.AddSeconds(1));
+
+        var packets = new List<byte>();
+        await recorder.PlaybackAsync(packet => { packets.Add(packet.Data[0]); return ValueTask.CompletedTask; });
+
+        Assert.Equal(new byte[] { 1, 2 }, packets);
+    }
+
+    [Fact]
     public async Task Recorder_IsSafeForConcurrentHostTraffic()
     {
         var recorder = new NetworkRecorder();

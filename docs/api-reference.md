@@ -228,6 +228,30 @@ System.Xml.XmlElement
 
 Small common envelope used by the high-level framework.
 
+## `GnsNet.NetworkClock.AddSample(GnsNet.NetworkClockSample@)`
+
+Adds one NTP-style timing response. Invalid, replayed, and extreme samples fail closed.
+
+## `GnsNet.NetworkClock.TicksDue(System.UInt32)`
+
+Returns a bounded number of fixed simulation ticks needed to approach server time.
+
+## `GnsNet.NetworkClock.Update(System.Int32)`
+
+Refreshes timelines at the current monotonic timestamp and transitions holdover state.
+
+## `GnsNet.NetworkClockSample.#ctor(System.UInt32,System.Int64,System.Int64,System.Int64,System.Int64,System.UInt32,System.Int32)`
+
+Four monotonic timestamps exchanged by the client and authoritative server.
+
+## `GnsNet.NetworkClockSnapshot.#ctor(GnsNet.NetworkClockState,System.Double,System.Double,System.UInt32,System.Double,System.Double,System.TimeSpan,System.TimeSpan,System.TimeSpan,System.Double,System.TimeSpan,System.Int32)`
+
+An immutable view of synchronized simulation, prediction, and rendering time.
+
+## `GnsNet.NetworkEntityId.#ctor(System.UInt64)`
+
+Stable engine-independent entity identity used by replication protocol v2.
+
 ## `GnsNet.NetworkObjectRegistry`1.Apply(GnsNet.NetworkObjectChange)`
 
 Applies an authoritative lifecycle record idempotently on a reconnecting client.
@@ -264,6 +288,54 @@ Deterministic inputs required to replay one prediction tick.
 
 Describes the wire contract a peer is willing to speak.
 
+## `GnsNet.Replication.ReplicatedComponentAttribute.#ctor(System.UInt16)`
+
+Marks a plain .NET type as a component with an explicit stable wire identity.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute.#ctor(System.Byte)`
+
+Marks a component member with an explicit stable field identity.
+
+## `GnsNet.Replication.ReplicationComponentDescriptor.#ctor(System.UInt16,System.UInt16,GnsNet.Replication.ReplicationMode,System.Boolean,System.String,System.Collections.Generic.IReadOnlyList{GnsNet.Replication.ReplicationFieldDescriptor})`
+
+Creates a component descriptor.
+
+## `GnsNet.Replication.ReplicationFieldDescriptor.#ctor(System.Byte,System.String,System.String,System.Single,System.Single,GnsNet.Replication.InterpolationMode,System.Boolean)`
+
+Debugger-friendly immutable field metadata emitted by the replication generator.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.FromGeneratedDescriptors(System.Collections.Generic.IEnumerable{System.Reflection.Assembly})`
+
+Builds a manifest-shaped view from generated descriptor metadata in loaded assemblies.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.Load(System.String)`
+
+Reads and parses a bounded UTF-8 manifest file.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.Parse(System.String)`
+
+Parses a manifest after applying the configured input bound.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.ToJson(GnsNet.Replication.Schema.ReplicationManifest)`
+
+Writes canonical indented JSON suitable for source control.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.Validate(GnsNet.Replication.Schema.ReplicationManifest)`
+
+Validates one manifest's bounded structure and identity uniqueness.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.ValidateEvolution(GnsNet.Replication.Schema.ReplicationManifest,GnsNet.Replication.Schema.ReplicationManifest)`
+
+Checks a candidate against its checked-in predecessor. Removed identities must be reserved; names never move between IDs; and changing a field wire type requires a schema increment.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator.VerifyGeneratedDescriptors(GnsNet.Replication.Schema.ReplicationManifest,System.Collections.Generic.IEnumerable{System.Reflection.Assembly})`
+
+Checks that checked-in metadata exactly describes the generated descriptors.
+
+## `GnsNet.ReplicationRecordV2.#ctor(GnsNet.EntityRecordKind,GnsNet.NetworkEntityId,GnsNet.ReplicationArchetypeId,System.UInt16,System.UInt16,GnsNet.DirtyFieldMask,System.Boolean,System.Byte[])`
+
+One bounded component/lifecycle record within a v2 replication packet.
+
 ## `GnsNet.RpcRouter.DescribeCapabilities`
 
 Returns the stable endpoint contract for capability negotiation.
@@ -279,6 +351,14 @@ Allocates the next sequence number to put in an outbound probe.
 ## `GnsNet.SequenceLossTracker.Observe(System.UInt32)`
 
 Records an observed sequence. Returns false for a duplicate or a bounded-window eviction.
+
+## `GnsNet.ShardProcessCoordinator`2.MigrateManyAsync(System.Collections.Generic.IEnumerable{System.ValueTuple{`1,`0}},System.Threading.CancellationToken)`
+
+Runs a deterministic migration batch across shard/dimension boundaries.
+
+## `GnsNet.SnapshotBuffer`1.TrySample(System.Double,System.Func{`0,`0,System.Single,`0},`0@)`
+
+System.Xml.XmlElement
 
 ## `GnsNet.SteamAuthSessionManager.BeginAuthSession(System.ReadOnlySpan{System.Byte},GnsSharp.CSteamID)`
 
@@ -424,6 +504,42 @@ Who sent this (on a server, the accepted client; on a client, always the server)
 
 The message payload.
 
+## `GnsNet.Replication.ReplicatedComponentAttribute.ComponentId`
+
+Stable component identifier. Never reuse a retired value.
+
+## `GnsNet.Replication.ReplicatedComponentAttribute.Mode`
+
+Replication authority and presentation policy.
+
+## `GnsNet.Replication.ReplicatedComponentAttribute.Required`
+
+Whether peers must understand this component before admission.
+
+## `GnsNet.Replication.ReplicatedComponentAttribute.SchemaVersion`
+
+Version of the component's wire schema.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute.FieldId`
+
+Stable field identifier within its component. Never reuse a retired value.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute.Interpolation`
+
+Interpolation policy for this member.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute.Optional`
+
+Whether receivers that do not know this field may skip it.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute.Quantize`
+
+Optional positive wire quantization step for floating-point values.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute.Threshold`
+
+Optional positive change threshold evaluated before sending a delta.
+
 ## `GnsNet.AuthenticationGateway`
 
 Converts an externally verified identity into the GNS.NET admission token used by the transport.
@@ -447,6 +563,10 @@ Routes server-originated RPC invocations to registered client handlers.
 ## `GnsNet.ComponentDirtyTracker`1`
 
 Tracks serialized component state and returns only entities whose state changed since the last tick.
+
+## `GnsNet.ComponentSnapshotScheduler`1`
+
+Per-observer v2 scheduler with reliable lifecycle ordering and acknowledgement-based baselines.
 
 ## `GnsNet.ConnectionRateLimiter`
 
@@ -592,9 +712,17 @@ Receives validated process-wide GNS configuration values.
 
 Native transport controls available to a connected endpoint.
 
+## `GnsNet.INetworkTimeSource`
+
+System.Xml.XmlElement
+
 ## `GnsNet.InterestManager`2`
 
 Filters entities per client before snapshot encoding.
+
+## `GnsNet.IReplicationComponentCodec`1`
+
+System.Xml.XmlElement
 
 ## `GnsNet.IShardMigrationAcknowledgement`1`
 
@@ -660,6 +788,26 @@ Routes framed messages to typed MemoryPack handlers.
 
 MemoryPack wire serialization used by all high-level GnsNet messages.
 
+## `GnsNet.NetworkClock`
+
+Disciplines a local monotonic clock to the server's monotonic epoch. Timestamp values in a sample must use the same monotonic-duration frequency as the supplied time source; wall-clock timestamps are deliberately not accepted.
+
+## `GnsNet.NetworkClockMetrics`
+
+Clock counters suitable for application telemetry.
+
+## `GnsNet.NetworkClockOptions`
+
+System.Xml.XmlElement
+
+## `GnsNet.NetworkClockSample`
+
+Four monotonic timestamps exchanged by the client and authoritative server.
+
+## `GnsNet.NetworkClockSnapshot`
+
+An immutable view of synchronized simulation, prediction, and rendering time.
+
 ## `GnsNet.NetworkClockSynchronizer`
 
 Tracks server clock offset and jitter using NTP-style four-timestamp samples.
@@ -671,6 +819,10 @@ Development-only deterministic latency, jitter, and loss injector.
 ## `GnsNet.NetworkDebugOverlay`
 
 Produces a renderer-neutral diagnostics line suitable for an in-game network overlay.
+
+## `GnsNet.NetworkEntityId`
+
+Stable engine-independent entity identity used by replication protocol v2.
 
 ## `GnsNet.NetworkFrameworkOptions`
 
@@ -747,6 +899,90 @@ A message received on a connection, copied out of native memory into a managed b
 ## `GnsNet.ReliableBackendBus`
 
 Authenticated backend envelope and retrying publish decorator.
+
+## `GnsNet.Replication.GenerateReplicationRegistryAttribute`
+
+Marks an assembly-level registry host for generated replication metadata.
+
+## `GnsNet.Replication.InterpolationMode`
+
+Controls how a field is sampled between two authoritative snapshots.
+
+## `GnsNet.Replication.IReplicatedComponentCodec`1`
+
+Static contract implemented by generated component codecs.
+
+## `GnsNet.Replication.ReplicatedComponentAttribute`
+
+Marks a plain .NET type as a component with an explicit stable wire identity.
+
+## `GnsNet.Replication.ReplicatedFieldAttribute`
+
+Marks a component member with an explicit stable field identity.
+
+## `GnsNet.Replication.ReplicatedIgnoreAttribute`
+
+Explicitly excludes a field or property from replication discovery.
+
+## `GnsNet.Replication.ReplicationComponentDescriptor`
+
+Debugger-friendly immutable component metadata emitted by the replication generator.
+
+## `GnsNet.Replication.ReplicationFieldDescriptor`
+
+Debugger-friendly immutable field metadata emitted by the replication generator.
+
+## `GnsNet.Replication.ReplicationMath`
+
+Shared canonical comparison, quantization, and interpolation helpers for generated codecs.
+
+## `GnsNet.Replication.ReplicationMode`
+
+Controls which peers may receive and simulate a replicated component.
+
+## `GnsNet.Replication.ReplicationReader`
+
+A bounds-checked little-endian reader used by generated fixed-size component codecs.
+
+## `GnsNet.Replication.ReplicationWriter`
+
+A bounded little-endian writer used by generated fixed-size component codecs.
+
+## `GnsNet.Replication.Schema.ReplicationManifest`
+
+Checked-in wire-contract history for replication protocol v2.
+
+## `GnsNet.Replication.Schema.ReplicationManifestComponent`
+
+One explicitly identified replicated component in a manifest.
+
+## `GnsNet.Replication.Schema.ReplicationManifestField`
+
+One explicitly identified replicated field in a manifest.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidationResult`
+
+Deterministic result returned by manifest validation and metadata comparison.
+
+## `GnsNet.Replication.Schema.ReplicationManifestValidator`
+
+Validates bounded replication manifests and prevents accidental wire-identity reuse. This is a build-time/tooling API; it is deliberately outside the encode/decode hot path.
+
+## `GnsNet.ReplicationPacketV2`
+
+System.Xml.XmlElement
+
+## `GnsNet.ReplicationPacketV2Limits`
+
+Configurable bounds applied before a v2 packet allocates decoded payloads.
+
+## `GnsNet.ReplicationRecordV2`
+
+One bounded component/lifecycle record within a v2 replication packet.
+
+## `GnsNet.ReplicationWorld`1`
+
+Authoritative component store used by the component snapshot scheduler.
 
 ## `GnsNet.RewindAuthorization`
 
@@ -843,6 +1079,10 @@ Thread-safe state for Steam auth-session validation callbacks.
 ## `GnsNet.SteamAuthSessionValidation`
 
 Result delivered by Steam after an auth ticket has been validated.
+
+## `GnsNet.StopwatchTimeSource`
+
+System.Xml.XmlElement
 
 ## `GnsNet.TcpBackendBusListener`
 

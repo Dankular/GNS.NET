@@ -110,6 +110,21 @@ public sealed class ReplicationPrimitivesTests
     }
 
     [Fact]
+    public void HitboxHistory_SubTickUsesBracketingFramesWhenTicksAreMissing()
+    {
+        var history = new HitboxRewindHistory();
+        history.Record(10, [new RewindHitbox(1, 5, 0, 1)]);
+        history.Record(20, [new RewindHitbox(1, 15, 0, 1)]);
+
+        IReadOnlyList<RewindHit> hits = history.RaycastSubTick(15, 0, 0, 1, 0, 20);
+
+        RewindHit hit = Assert.Single(hits);
+        Assert.Equal(1, hit.EntityId);
+        Assert.Equal(15u, hit.Tick);
+        Assert.InRange(hit.Distance, 8.99f, 9.01f);
+    }
+
+    [Fact]
     public void HitboxHistory_EnforcesPerFrameBudgetAndCountsRejections()
     {
         var history = new HitboxRewindHistory(maxHitboxesPerFrame: 2);

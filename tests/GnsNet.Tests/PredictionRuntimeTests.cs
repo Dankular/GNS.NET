@@ -255,6 +255,22 @@ public sealed class PredictionRuntimeTests
     }
 
     [Fact]
+    public void PredictedWorldRuntime_PassesMetadataToPredictionAndRollbackSimulation()
+    {
+        var seen = new List<PredictionTickMetadata>();
+        var metadata = new PredictionTickMetadata(TimeSpan.FromMilliseconds(20), 17, 4);
+        var runtime = new PredictedWorldRuntime<int, int>(0,
+            (state, input, tickMetadata) => { seen.Add(tickMetadata); return state + input + (int)tickMetadata.DeterministicSeed; },
+            (from, to, amount) => to, predictionMetadata: metadata);
+
+        runtime.Predict(1, 1);
+        runtime.Reconcile(0, 0);
+
+        Assert.Equal(new[] { metadata, metadata }, seen);
+        Assert.Equal(18, runtime.PredictedState);
+    }
+
+    [Fact]
     public void DirtyMaskQuantizationAndExtrapolationAreDeterministic()
     {
         var mask = new DirtyFieldMask(65); mask.Set(64); Assert.True(mask.IsSet(64)); mask.Clear(); Assert.False(mask.IsSet(64));
